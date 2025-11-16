@@ -1,0 +1,16 @@
+{
+  "name": "redenv",
+  "version": "1.0.0",
+  "author": "",
+  "main": "index.js",
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "description": "",
+  "keywords": [],
+  "license": "ISC",
+  "packageManager": "pnpm@10.16.1",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}

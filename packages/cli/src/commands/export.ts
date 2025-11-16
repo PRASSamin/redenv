@@ -1,0 +1,192 @@
+import chalk from "chalk";
+import ora from "ora";
+import fs from "fs";
+import path from "path";
+import { Command } from "commander";
+import { redis } from "../core/upstash";
+import { loadProjectConfig } from "../core/config";
+import { confirm, checkbox, select } from "@inquirer/prompts";
+import { normalize, sanitizeName } from "../utils";
+import { fetchEnvironments, fetchProjects } from "../utils/redis";
+import dotenv from "dotenv";
+
+export function exportCommand(program: Command) {
+  program
+    .command("export")
+    .description("Export environment variables into a .env file")
+    .option("--skip-config", "Ignore project config file")
+    .option("-p, --project <name>", "Specify project name")
+    .option("-e, --env <env>", "Specify environment")
+    .option("-f, --file <path>", "Output file (default: .env)", ".env")
+    .action(async (options) => {
+      const config = options.skipConfig ? null : loadProjectConfig();
+      let projectName = sanitizeName(options.project) || config?.name;
+      let environment = sanitizeName(options.env) || config?.environment;
+      const outputFile = options.file;
+
+      if (!projectName) {
+        const projects = await fetchProjects();
+
+        if (!projects.length) {
+          console.log(chalk.red("✘ No projects found in Redis."));
+          return;
+        }
+
+        projectName = await select({
+          message: "Select project:",
+          choices: projects,
+        });
+      }
+
+      if (!environment) {
+        const envs = await fetchEnvironments(projectName, true);
+        environment = await select({
+          message: "Select environment:",
+          choices: envs,
+        });
+      }
+
+      const redisKey = `${environment}:${projectName}`;
+      const spinner = ora(
+        `Fetching variables from ${projectName} (${environment})...`
+      ).start();
+      let vars: Record<string, string> = {};
+      try {
+        vars = (await redis.hgetall(redisKey)) || {};
+        spinner.succeed(chalk.green("Variables fetched"));
+      } catch (err) {
+        spinner.fail(
+          chalk.red(`Failed to fetch variables: ${(err as Error).message}`)
+        );
+        return;
+      }
+
+      if (!Object.keys(vars).length) {
+        console.log(chalk.yellow("⚠ No variables found to export."));
+        return;
+      }
+
+      let selectedKeys: string[];
+      try {
+        const exportAll = await confirm({
+          message: "Export ALL keys?",
+          default: true,
+        });
+        if (exportAll) {
+          selectedKeys = Object.keys(vars);
+        } else {
+          selectedKeys = await checkbox({
+            message: "Select keys to export:",
+            choices: Object.keys(vars).map((k) => ({ name: k, value: k })),
+            loop: false,
+          });
+
+          if (!selectedKeys.length) {
+            console.log(chalk.yellow("⚠ No keys selected. Cancelled."));
+            return;
+          }
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === "ExitPromptError") {
+          console.log(chalk.yellow("Cancelled"));
+          return;
+        }
+        throw err;
+      }
+
+      const filePath = path.resolve(process.cwd(), outputFile);
+      let existingContent = "";
+      let existingVars: Record<string, string> = {};
+      if (fs.existsSync(filePath)) {
+        existingContent = fs.readFileSync(filePath, "utf8");
+        existingVars = dotenv.parse(existingContent);
+      }
+
+      // detect conflicts and skip same values
+      const conflicts = selectedKeys.filter((key) =>
+        Object.prototype.hasOwnProperty.call(existingVars, key)
+      );
+
+      const diffValues = conflicts.filter(
+        (key) => normalize(existingVars[key]) !== normalize(vars[key])
+      );
+
+      let override = false;
+      if (diffValues.length > 0) {
+        override = await confirm({
+          message: `The following keys already exist with different values: ${chalk.magenta(
+            diffValues.join(", ")
+          )}. Override them?`,
+          default: false,
+        });
+      }
+
+      // Keys to write include new keys + overridden keys
+      const newKeys = selectedKeys.filter((k) => !conflicts.includes(k));
+      const keysToWrite = [...newKeys];
+      if (override) {
+        keysToWrite.push(...diffValues);
+      }
+
+      if (keysToWrite.length === 0) {
+        console.log(
+          chalk.green("✔ Nothing to export. Everything is already in sync.")
+        );
+        return;
+      }
+
+      let finalContent = existingContent;
+      const keysToOverride = override ? diffValues : [];
+
+      if (keysToOverride.length > 0) {
+        const lines = finalContent.split("\n");
+        const newLines = lines.map((line) => {
+          const trimmedLine = line.trim();
+          // Skip comments and empty lines
+          if (trimmedLine.startsWith("#") || !trimmedLine.includes("=")) {
+            return line;
+          }
+          const keyMatch = trimmedLine.match(/^([^=]+)=/);
+          if (keyMatch) {
+            const key = keyMatch[1].trim();
+            if (keysToOverride.includes(key)) {
+              // Found a key to override, so comment out this line.
+              return `# ${line} # overridden by redenv`;
+            }
+          }
+          return line;
+        });
+        finalContent = newLines.join("\n");
+      }
+
+      // Prepare the content to append
+      let contentToAppend = "";
+      if (keysToWrite.length > 0) {
+        contentToAppend +=
+          finalContent.endsWith("\n\n") || finalContent.length === 0
+            ? ""
+            : "\n";
+        contentToAppend += `
+# Variables exported by redenv from ${projectName} (${environment}) at ${new Date().toISOString()}
+`;
+        keysToWrite.forEach((key) => {
+          contentToAppend += `${key}="${vars[key]}"\n`;
+        });
+      }
+
+      finalContent += contentToAppend;
+
+      try {
+        fs.writeFileSync(filePath, finalContent);
+        console.log(
+          chalk.green(
+            `✔ Exported ${keysToWrite.length} keys to ${chalk.blue(outputFile)}`
+          )
+        );
+      } catch (err) {
+        console.log(
+          chalk.red(`✘ Failed to write file: ${(err as Error).message}`)
+        );
+      }
+    });
+}
