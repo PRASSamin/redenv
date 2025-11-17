@@ -12,6 +12,7 @@ import {
   generateSalt,
 } from "../core/crypto";
 import { redis } from "../core/upstash";
+import { unlockProject } from "../core/keys";
 
 export function registerCommand(program: Command) {
   program
@@ -19,7 +20,7 @@ export function registerCommand(program: Command) {
     .argument("<project>", "Project name")
     .argument("[env]", "Project environment", "development")
     .argument("[prodEnv]", "Production environment", "production")
-    .description("Register a new project for redenv")
+    .description("Register a new project or connect to an existing one")
     .action(async (project, env, prodEnv) => {
       const sanitizedProject = sanitizeName(project);
       const sanitizedEnv = sanitizeName(env);
@@ -37,59 +38,74 @@ export function registerCommand(program: Command) {
         );
       }
 
-      const projectConfig = loadProjectConfig();
-      if (projectConfig && projectConfig.name === sanitizedProject) {
+      const localConfig = loadProjectConfig();
+      if (localConfig && localConfig.name === sanitizedProject) {
         console.log(
-          chalk.yellow(`Project ${sanitizedProject} is already registered.`)
+          chalk.yellow(
+            `This directory is already registered with project "${sanitizedProject}".`
+          )
         );
         return;
       }
 
-      // Get master password
+      const spinner = ora("Checking project status...").start();
+      const metaKey = `meta@${sanitizedProject}`;
+      const projectExists = (await redis.exists(metaKey)) > 0;
+      spinner.stop();
+
+      // --- Flow for connecting to an EXISTING remote project ---
+      if (projectExists) {
+        console.log(
+          chalk.blue(`Project "${sanitizedProject}" already exists remotely.`)
+        );
+        await unlockProject(sanitizedProject as string); // This verifies the password
+
+        const data = {
+          name: sanitizedProject,
+          environment: sanitizedEnv,
+          productionEnvironment: sanitizedProdEnv,
+          createdAt: new Date().toISOString(),
+        };
+        fs.writeFileSync(PROJECT_CONFIG_PATH, JSON.stringify(data, null, 2));
+        console.log(
+          chalk.green(
+            `\n✔ Successfully connected local directory to project "${sanitizedProject}".`
+          )
+        );
+        return;
+      }
+
+      // --- Flow for creating a NEW project ---
+      console.log(
+        chalk.blue(`Creating new encrypted project "${sanitizedProject}"...`)
+      );
       const masterPassword = await safePrompt(() =>
         password({
           message: `Create a Master Password for project "${sanitizedProject}":`,
           mask: "*",
           validate: (p) =>
-            p.length >= 8
-              ? true
-              : "Password must be at least 8 characters long.",
+            p.length >= 8 || "Password must be at least 8 characters long.",
         })
       );
-      const confirmPassword = await safePrompt(() =>
+      await safePrompt(() =>
         password({
           message: "Confirm Master Password:",
           mask: "*",
-          validate: (value) => {
-            if (value !== masterPassword) {
-              return "Passwords do not match.";
-            }
-            return true;
-          },
+          validate: (value) =>
+            value === masterPassword || "Passwords do not match.",
         })
       );
 
-      if (masterPassword !== confirmPassword) {
-        console.log(chalk.red("✘ Passwords do not match."));
-        return;
-      }
-
-      const spinner = ora("Encrypting and registering project...").start();
-
+      spinner.info("Encrypting and registering project...");
       try {
-        // 1. Generate keys and salt
         const salt = generateSalt();
-        const projectEncryptionKey = generateRandomKey(); // PEK
+        const projectEncryptionKey = generateRandomKey();
         const passwordDerivedKey = await deriveKey(masterPassword, salt);
-
-        // 2. Encrypt the PEK with the password-derived key
         const encryptedPEK = encrypt(
           projectEncryptionKey.toString("hex"),
           passwordDerivedKey
         );
 
-        // 3. Store metadata in Redis
-        const metaKey = `meta@${sanitizedProject}`;
         const metadata = {
           encryptedPEK: encryptedPEK,
           salt: salt.toString("hex"),
@@ -97,10 +113,8 @@ export function registerCommand(program: Command) {
           algorithm: "aes-256-gcm",
           createdAt: new Date().toISOString(),
         };
-
         await redis.hset(metaKey, metadata);
 
-        // 4. Write local config file
         const data = {
           name: sanitizedProject,
           environment: sanitizedEnv,

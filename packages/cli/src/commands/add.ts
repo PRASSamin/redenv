@@ -3,7 +3,11 @@ import ora from "ora";
 import { redis } from "../core/upstash";
 import { Command } from "commander";
 import { loadProjectConfig } from "../core/config";
-import { sanitizeName } from "../utils";
+import { sanitizeName, safePrompt } from "../utils";
+import { unlockProject } from "../core/keys";
+import { encrypt } from "../core/crypto";
+import { fetchEnvironments } from "../utils/redis";
+import { select } from "@inquirer/prompts";
 
 export function addCommand(program: Command) {
   program
@@ -25,18 +29,32 @@ export function addCommand(program: Command) {
         return;
       }
 
-      const projectName = sanitizeName(options.project) || projectConfig?.name;
-      const environment =
-        sanitizeName(options.env) || projectConfig?.environment || "dev";
-      const redisKey = `${environment}:${projectName}`;
+      const projectName =
+        sanitizeName(options.project) || projectConfig?.name!;
+      let environment = 
+        sanitizeName(options.env) || projectConfig?.environment;
 
-      const spinner = ora(
-        `Adding ${chalk.cyan(key)} to ${chalk.yellow(
-          projectName
-        )} (${environment})...`
-      ).start();
+      if (!environment) {
+        const envs = await fetchEnvironments(projectName, true);
+        environment = await safePrompt(() =>
+          select({
+            message: "Select environment:",
+            choices: envs.map((e) => ({ name: e, value: e })),
+          })
+        );
+      }
 
       try {
+        // Unlock project and get encryption key
+        const pek = await unlockProject(projectName);
+
+        const spinner = ora(
+          `Adding ${chalk.cyan(key)} to ${chalk.yellow(
+            projectName
+          )} (${environment})...`
+        ).start();
+
+        const redisKey = `${environment}:${projectName}`;
         const exists = await redis.hexists(redisKey, key);
         if (exists) {
           spinner.fail(
@@ -47,7 +65,10 @@ export function addCommand(program: Command) {
           return;
         }
 
-        await redis.hset(redisKey, { [key]: value });
+        // Encrypt the value before storing
+        const encryptedValue = encrypt(value, pek);
+
+        await redis.hset(redisKey, { [key]: encryptedValue });
         spinner.succeed(
           chalk.greenBright(
             `Added '${key}' → ${chalk.cyan(
@@ -56,9 +77,14 @@ export function addCommand(program: Command) {
           )
         );
       } catch (err) {
-        spinner.fail(
-          chalk.red(`Failed to add '${key}': ${(err as Error).message}`)
-        );
+        // The spinner may not be initialized if unlockProject fails, so check for it.
+        if (ora().spinner) {
+          ora().fail(
+            chalk.red(`Failed to add '${key}': ${(err as Error).message}`)
+          );
+        } else {
+          // unlockProject already logs its own errors, so we might not need to log again.
+        }
       }
     });
 }

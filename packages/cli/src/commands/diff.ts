@@ -6,6 +6,8 @@ import { loadProjectConfig } from "../core/config";
 import { select, checkbox } from "@inquirer/prompts";
 import { safePrompt, sanitizeName } from "../utils";
 import { fetchEnvironments, fetchProjects } from "../utils/redis";
+import { unlockProject } from "../core/keys";
+import { decrypt } from "../core/crypto";
 
 export function diffCommand(program: Command) {
   program
@@ -20,79 +22,82 @@ export function diffCommand(program: Command) {
       if (!options.skipConfig) config = loadProjectConfig();
       if (!projectName && config) projectName = config.name;
 
-      // If still no project, ask user
       if (!projectName) {
         const projects = await fetchProjects();
-
         if (projects.length === 0) {
           console.log(chalk.red("✘ No projects found in Redis."));
           return;
         }
-
         projectName = await safePrompt(() =>
           select({
             message: "Select project:",
-            choices: projects,
+            choices: projects.map((p) => ({ name: p, value: p })),
           })
         );
       }
 
-      const enviornments = (await fetchEnvironments(projectName || "")) || [];
+      const pek = await unlockProject(projectName);
 
-      if (enviornments.length < 2) {
-        console.log(
-          chalk.red("✘ Only one environment found. Need at least 2.")
-        );
+      const environments = (await fetchEnvironments(projectName)) || [];
+      if (environments.length < 2) {
+        console.log(chalk.red("✘ This project only has one environment. Diff requires at least two."));
         return;
       }
 
-      let selected = [];
-
-      // Auto pick if exactly 2
-      if (enviornments.length === 2) {
-        selected = enviornments;
+      let selected: string[] = [];
+      if (environments.length === 2) {
+        selected = environments;
       } else {
-        selected = await checkbox({
-          message: "Pick two environments to compare:",
-          choices: enviornments,
-          validate: (arr) =>
-            arr.length === 2 ? true : "Select exactly two environments",
-          required: true,
-          loop: false,
-        });
+        selected = await safePrompt(() =>
+          checkbox({
+            message: "Pick two environments to compare:",
+            choices: environments.map((e) => ({ name: e, value: e })),
+            validate: (arr) => arr.length === 2 || "Select exactly two environments",
+            required: true,
+            loop: false,
+          })
+        );
       }
 
       const [envA, envB] = selected;
-
       const keyA = `${envA}:${projectName}`;
       const keyB = `${envB}:${projectName}`;
 
-      const spinner2 = ora(`Fetching ${envA} & ${envB}...`).start();
-
-      let varsA = {};
-      let varsB = {};
+      const spinner = ora(`Fetching and decrypting variables...`).start();
+      let decryptedVarsA: Record<string, string> = {};
+      let decryptedVarsB: Record<string, string> = {};
 
       try {
-        varsA = (await redis.hgetall(keyA)) ?? {};
-        varsB = (await redis.hgetall(keyB)) ?? {};
-        spinner2.succeed("Loaded both environments");
+        const [varsA, varsB] = await Promise.all([
+          redis.hgetall<Record<string, string>>(keyA) ?? {},
+          redis.hgetall<Record<string, string>>(keyB) ?? {},
+        ]);
+
+        for (const key in varsA) {
+          try {
+            decryptedVarsA[key] = decrypt(varsA[key], pek);
+          } catch {
+            decryptedVarsA[key] = `[un-decryptable]`;
+          }
+        }
+        for (const key in varsB) {
+          try {
+            decryptedVarsB[key] = decrypt(varsB[key], pek);
+          } catch {
+            decryptedVarsB[key] = `[un-decryptable]`;
+          }
+        }
+        spinner.succeed("Loaded and decrypted both environments");
       } catch (err) {
-        spinner2.fail(chalk.red(`Failed: ${(err as Error).message}`));
+        spinner.fail(chalk.red(`Failed: ${(err as Error).message}`));
         return;
       }
 
-      const keysA = Object.keys(varsA);
-      const keysB = Object.keys(varsB);
-
+      const keysA = Object.keys(decryptedVarsA);
+      const keysB = Object.keys(decryptedVarsB);
       const allKeys = new Set([...keysA, ...keysB]);
 
-      console.log("");
-      console.log(
-        chalk.cyan(
-          `🔍 Comparing "${envA}" ↔ "${envB}" for project "${projectName}"`
-        )
-      );
-      console.log("");
+      console.log(`\n🔍 Comparing "${envA}" ↔ "${envB}" for project "${projectName}"\n`);
 
       const onlyInA: string[] = [];
       const onlyInB: string[] = [];
@@ -100,35 +105,24 @@ export function diffCommand(program: Command) {
       const sameKeys: string[] = [];
 
       for (const key of [...allKeys].sort()) {
-        const a = varsA[key as keyof typeof varsA];
-        const b = varsB[key as keyof typeof varsB];
+        const a = decryptedVarsA[key];
+        const b = decryptedVarsB[key];
 
-        if (a === undefined && b !== undefined) {
-          onlyInB.push(key);
-        } else if (a !== undefined && b === undefined) {
-          onlyInA.push(key);
-        } else if (a !== b) {
-          changedKeys.push(key);
-        } else {
-          sameKeys.push(key);
-        }
+        if (a === undefined && b !== undefined) onlyInB.push(key);
+        else if (a !== undefined && b === undefined) onlyInA.push(key);
+        else if (a !== b) changedKeys.push(key);
+        else sameKeys.push(key);
       }
 
       if (onlyInA.length) {
         console.log(chalk.magenta("🔸 Only in " + envA));
-        onlyInA.forEach((k) =>
-          console.log(
-            `  • ${k}="${chalk.green(varsA[k as keyof typeof varsA])}"`
-          )
-        );
+        onlyInA.forEach((k) => console.log(`  • ${k}="${chalk.green(decryptedVarsA[k])}"`));
         console.log("");
       }
 
       if (onlyInB.length) {
         console.log(chalk.blue("🔹 Only in " + envB));
-        onlyInB.forEach((k) =>
-          console.log(`  • ${k}="${varsB[k as keyof typeof varsB]}"`)
-        );
+        onlyInB.forEach((k) => console.log(`  • ${k}="${decryptedVarsB[k]}"`));
         console.log("");
       }
 
@@ -136,16 +130,8 @@ export function diffCommand(program: Command) {
         console.log(chalk.yellow("🟡 Changed"));
         changedKeys.forEach((k) => {
           console.log(chalk.bold(`  • ${k}`));
-          console.log(
-            `      ${envA}: ${chalk.red(
-              JSON.stringify(varsA[k as keyof typeof varsA])
-            )}`
-          );
-          console.log(
-            `      ${envB}: ${chalk.green(
-              JSON.stringify(varsB[k as keyof typeof varsB])
-            )}`
-          );
+          console.log(`      ${envA}: ${chalk.red(JSON.stringify(decryptedVarsA[k]))}`);
+          console.log(`      ${envB}: ${chalk.green(JSON.stringify(decryptedVarsB[k]))}`);
         });
         console.log("");
       }

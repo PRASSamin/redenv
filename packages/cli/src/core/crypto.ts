@@ -25,7 +25,10 @@ const SCRYPT_OPTIONS = {
 /**
  * Derives a key from a password and salt using scrypt.
  */
-export async function deriveKey(password: string, salt: Buffer): Promise<Buffer> {
+export async function deriveKey(
+  password: string,
+  salt: Buffer
+): Promise<Buffer> {
   const key = (await scryptAsync(
     password,
     salt,
@@ -56,13 +59,16 @@ export function generateRandomKey(): Buffer {
 export function encrypt(data: string, key: Buffer): string {
   const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv(ALGORITHM, key, iv);
-  const encrypted = Buffer.concat([cipher.update(data, "utf8"), cipher.final()]);
+  const encrypted = Buffer.concat([
+    cipher.update(data, "utf8"),
+    cipher.final(),
+  ]);
   const authTag = cipher.getAuthTag();
 
   // Combine iv, authTag, and encrypted data into a single string for storage
-  return `${iv.toString("hex")}:${authTag.toString(
+  return `${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted.toString(
     "hex"
-  )}:${encrypted.toString("hex")}`;
+  )}`;
 }
 
 /**
@@ -93,7 +99,7 @@ export function decrypt(encryptedString: string, key: Buffer): string {
     // If decryption fails (e.g., wrong password/key), it will throw an error.
     // We catch it to provide a more user-friendly message.
     throw new Error(
-      "Decryption failed. This likely means you entered the wrong password."
+      "Incorrect password or corrupted data. Please verify your password and try again."
     );
   }
 }

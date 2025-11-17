@@ -4,9 +4,11 @@ import ora from "ora";
 import { redis } from "../core/upstash";
 import { loadProjectConfig } from "../core/config";
 import { safePrompt, sanitizeName } from "../utils";
-import { fetchEnvironments, fetchProjects } from "../utils/redis";
+import { fetchEnvironments } from "../utils/redis";
 import { select } from "@inquirer/prompts";
 import { multiline } from "@cli-prompts/multiline";
+import { unlockProject } from "../core/keys";
+import { encrypt } from "../core/crypto";
 
 export function editCommand(program: Command) {
   program
@@ -27,39 +29,27 @@ export function editCommand(program: Command) {
         return;
       }
 
-      let projectName = sanitizeName(options.project) || projectConfig?.name;
-      let environment = sanitizeName(options.env) || projectConfig?.environment;
+      const projectName = 
+        sanitizeName(options.project) || projectConfig?.name!;
+      let environment = 
+        sanitizeName(options.env) || projectConfig?.environment;
+
       if (!environment) {
-        const envs = (await fetchEnvironments(projectName || "", true)) || [];
+        const envs = (await fetchEnvironments(projectName, true)) || [];
         environment = await safePrompt(() =>
           select({
             message: "Select environment:",
             loop: false,
-            choices: envs,
+            choices: envs.map((e) => ({ name: e, value: e })),
           })
         );
       }
-
-      if (!projectName) {
-        const projects = await fetchProjects();
-
-        if (projects.length === 0) {
-          console.log(chalk.red("✘ No projects found in Redis."));
-          return;
-        }
-
-        projectName = await safePrompt(() =>
-          select({
-            message: "Select project:",
-            choices: projects,
-            loop: false,
-          })
-        );
-      }
-
-      const redisKey = `${environment}:${projectName}`;
 
       try {
+        const pek = await unlockProject(projectName);
+
+        const redisKey = `${environment}:${projectName}`;
+
         const exists = await redis.hexists(redisKey, key);
         if (!exists) {
           console.log(
@@ -87,7 +77,9 @@ export function editCommand(program: Command) {
           )} (${environment})...`
         ).start();
 
-        await redis.hset(redisKey, { [key]: newValue });
+        const encryptedValue = encrypt(newValue, pek);
+        await redis.hset(redisKey, { [key]: encryptedValue });
+
         spinner.succeed(
           chalk.greenBright(
             `Updated '${key}' → ${chalk.cyan(
@@ -96,8 +88,9 @@ export function editCommand(program: Command) {
           )
         );
       } catch (err) {
+        // Errors from unlockProject are handled, so this will catch other issues.
         console.log(
-          chalk.red(`Failed to update '${key}': ${(err as Error).message}`)
+          chalk.red(`\n✘ Failed to update '${key}': ${(err as Error).message}`)
         );
       }
     });

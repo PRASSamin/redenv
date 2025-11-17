@@ -10,6 +10,9 @@ import { loadProjectConfig } from "../core/config";
 import { nameValidator, safePrompt, writeProjectConfig } from "../utils";
 import { input } from "@inquirer/prompts";
 import dotenv from "dotenv";
+import { unlockProject } from "../core/keys";
+import { decrypt, encrypt } from "../core/crypto";
+import { multiline } from "@cli-prompts/multiline";
 
 export function promoteCommand(program: Command) {
   program
@@ -26,37 +29,36 @@ export function promoteCommand(program: Command) {
         return;
       }
 
-      const projectName = projectConfig?.name;
+      const projectName = projectConfig.name;
 
-      let environment = projectConfig?.environment;
-      if (projectConfig && !environment) {
+      let environment = projectConfig.environment;
+      if (!environment) {
         environment = "development";
-        writeProjectConfig({
-          environment,
-        });
+        writeProjectConfig({ environment });
       }
 
-      const devKey = `${environment}:${projectName}`;
-
-      let promotionEnvironment = projectConfig?.productionEnvironment;
-      if (!projectConfig?.productionEnvironment) {
+      let promotionEnvironment = projectConfig.productionEnvironment;
+      if (!promotionEnvironment) {
         promotionEnvironment = await safePrompt(() =>
           input({
             message: "Enter promotion environment name:",
-            required: true,
+            default: "production",
             validate: nameValidator,
           })
         );
-        writeProjectConfig({
-          productionEnvironment: promotionEnvironment,
-        });
+        writeProjectConfig({ productionEnvironment: promotionEnvironment });
       }
-      const prodKey = `${promotionEnvironment}:${projectName}`;
 
-      const spinner = ora(
-        `Fetching variables from ${environment} and ${promotionEnvironment}...`
-      ).start();
       try {
+        const pek = await unlockProject(projectName);
+
+        const spinner = ora(
+          `Fetching variables from ${environment} and ${promotionEnvironment}...`
+        ).start();
+
+        const devKey = `${environment}:${projectName}`;
+        const prodKey = `${promotionEnvironment}:${projectName}`;
+
         const [devVars, prodVars] = await Promise.all([
           redis.hgetall<Record<string, string>>(devKey),
           redis.hgetall<Record<string, string>>(prodKey),
@@ -70,7 +72,6 @@ export function promoteCommand(program: Command) {
           return;
         }
 
-        // Filter dev keys that are not yet in prod
         const newKeys = Object.fromEntries(
           Object.entries(devVars).filter(([k]) => !(k in (prodVars || {})))
         );
@@ -84,49 +85,69 @@ export function promoteCommand(program: Command) {
           return;
         }
 
-        // Create temp .env file for editing
-        const tempFile = path.join(
-          os.tmpdir(),
-          `redenv-${projectName}-promote.env`
-        );
-        const envContent = Object.entries(newKeys)
-          .map(([k, v]) => `${k}=${v}`)
+        spinner.info("Decrypting new keys for editing...");
+        const decryptedNewKeys: Record<string, string> = {};
+        for (const key in newKeys) {
+          try {
+            decryptedNewKeys[key] = decrypt(newKeys[key], pek);
+          } catch {
+            decryptedNewKeys[key] = "[redenv: could not decrypt]";
+          }
+        }
+        spinner.stop();
+
+        const envContent = Object.entries(decryptedNewKeys)
+          .map(([k, v]) => `${k}="${v}"`)
           .join("\n");
 
-        fs.writeFileSync(tempFile, envContent, "utf8");
         console.log(
-          chalk.cyan(
-            `📝 Loaded ${Object.keys(newKeys).length} new keys for editing.`
+          chalk.cyan(`📝 Loaded ${Object.keys(newKeys).length} keys.`)
+        );
+
+        const updatedValues = await safePrompt(() =>
+          multiline({
+            prompt: "Edit values to promote:",
+            required: true,
+            spinner: true,
+            default: envContent,
+          })
+        );
+
+        const updatedVars = dotenv.parse(updatedValues);
+
+        const originalNewKeys = Object.keys(newKeys);
+        const finalVarsToPromote = Object.fromEntries(
+          Object.entries(updatedVars).filter(([k]) =>
+            originalNewKeys.includes(k)
           )
         );
 
-        // Open in editor
-        const editor = process.env.EDITOR || "nano";
-        try {
-          execSync(`${editor} "${tempFile}"`, { stdio: "inherit" });
-        } catch {
-          console.log(chalk.gray("Editor closed or interrupted."));
+        if (Object.keys(finalVarsToPromote).length === 0) {
+          console.log(chalk.yellow("No variables to promote after editing."));
+          return;
         }
 
-        // Read updated file
-        const updatedContent = fs.readFileSync(tempFile, "utf8");
-        const updatedVars = dotenv.parse(updatedContent);
+        const uploadSpinner = ora(
+          `Encrypting and promoting new variables to ${promotionEnvironment}...`
+        ).start();
+        const encryptedFinalVars: Record<string, string> = {};
+        for (const key in finalVarsToPromote) {
+          encryptedFinalVars[key] = encrypt(finalVarsToPromote[key], pek);
+        }
 
-        // Filter to only include keys that were originally new
-        const originalNewKeys = Object.keys(newKeys);
-        const finalVarsToPromote = Object.fromEntries(
-          Object.entries(updatedVars).filter(([k]) => originalNewKeys.includes(k))
-        );
-
-        const uploadSpinner = ora(`Promoting new variables to prod...`).start();
-        await redis.hset(prodKey, finalVarsToPromote);
+        await redis.hset(prodKey, encryptedFinalVars);
         uploadSpinner.succeed(
-          chalk.greenBright(`New keys promoted to prod successfully!`)
+          chalk.greenBright(
+            `New keys promoted to ${promotionEnvironment} successfully!`
+          )
         );
-
-        fs.unlinkSync(tempFile); // clean temp file
       } catch (err) {
-        spinner.fail(chalk.red(`Failed: ${(err as Error).message}`));
+        // Errors from unlockProject are handled, so this will catch other issues.
+        console.log(
+          chalk.red(
+            `\n✘ An unexpected error occurred: ${(err as Error).message}`
+          )
+        );
       }
     });
 }

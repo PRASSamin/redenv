@@ -48,18 +48,13 @@ export const fetchEnvironments = async (
   }
 };
 
-export const fetchProjects = async (
-  withEnv: boolean = false
-): Promise<string[]> => {
+export const fetchProjects = async (): Promise<string[]> => {
   const spinner = ora("Fetching projects...").start();
   try {
-    const keys = await scanAll("*:*");
-
+    const keys = await scanAll("*@*");
     spinner.stop();
 
-    return Array.from(
-      new Set(keys.map((k) => (withEnv ? k : k.split(":")[1])))
-    );
+    return Array.from(new Set(keys.map((k) =>  k.split("@")[1])));
   } catch (err) {
     spinner.fail();
     throw new Error(`Failed to fetch projects: ${(err as Error).message}`);

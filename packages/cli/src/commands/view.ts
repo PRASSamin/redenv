@@ -58,14 +58,14 @@ export function viewCommand(program: Command) {
         if (encryptedValue === null || encryptedValue === undefined) {
           spinner.fail(
             chalk.red(
-              `✘ Key '${key}' not found in ${projectName} (${environment}).`
+              `Key '${key}' not found in ${projectName} (${environment}).`
             )
           );
           return;
         }
 
         spinner.succeed(
-          chalk.greenBright(`✔ Found key in ${projectName} (${environment})`)
+          chalk.greenBright(`Found key in ${projectName} (${environment})`)
         );
 
         let decryptedValue: string;

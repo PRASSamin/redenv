@@ -25,6 +25,10 @@ import { diffCommand } from "./commands/diff";
 import { importCommand } from "./commands/import";
 import { dropCommand } from "./commands/drop";
 import { doctorCommand } from "./commands/doctor";
+import { logoutCommand } from "./commands/logout";
+import { changePasswordCommand } from "./commands/change-password";
+import { backupCommand } from "./commands/backup";
+import { restoreCommand } from "./commands/restore";
 import path from "path";
 import { safePrompt } from "./utils";
 
@@ -82,6 +86,10 @@ async function main() {
     diffCommand(program);
     dropCommand(program);
     doctorCommand(program);
+    logoutCommand(program);
+    changePasswordCommand(program);
+    backupCommand(program);
+    restoreCommand(program);
 
     // Setup command
     program

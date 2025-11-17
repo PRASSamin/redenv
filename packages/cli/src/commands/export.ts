@@ -6,9 +6,11 @@ import { Command } from "commander";
 import { redis } from "../core/upstash";
 import { loadProjectConfig } from "../core/config";
 import { confirm, checkbox, select } from "@inquirer/prompts";
-import { normalize, sanitizeName } from "../utils";
+import { normalize, safePrompt, sanitizeName } from "../utils";
 import { fetchEnvironments, fetchProjects } from "../utils/redis";
 import dotenv from "dotenv";
+import { unlockProject } from "../core/keys";
+import { decrypt } from "../core/crypto";
 
 export function exportCommand(program: Command) {
   program
@@ -26,61 +28,59 @@ export function exportCommand(program: Command) {
 
       if (!projectName) {
         const projects = await fetchProjects();
-
         if (!projects.length) {
           console.log(chalk.red("✘ No projects found in Redis."));
           return;
         }
-
-        projectName = await select({
-          message: "Select project:",
-          choices: projects,
-        });
+        projectName = await safePrompt(() =>
+          select({
+            message: "Select project:",
+            choices: projects.map((p) => ({ name: p, value: p })),
+          })
+        );
       }
 
       if (!environment) {
         const envs = await fetchEnvironments(projectName, true);
-        environment = await select({
-          message: "Select environment:",
-          choices: envs,
-        });
+        environment = await safePrompt(() =>
+          select({
+            message: "Select environment:",
+            choices: envs.map((e) => ({ name: e, value: e })),
+          })
+        );
       }
 
+      const pek = await unlockProject(projectName);
+
       const redisKey = `${environment}:${projectName}`;
-      const spinner = ora(
-        `Fetching variables from ${projectName} (${environment})...`
-      ).start();
-      let vars: Record<string, string> = {};
+      const spinner = ora(`Fetching variables from ${projectName} (${environment})...`).start();
+      let encryptedVars: Record<string, string> = {};
       try {
-        vars = (await redis.hgetall(redisKey)) || {};
+        encryptedVars = (await redis.hgetall(redisKey)) || {};
         spinner.succeed(chalk.green("Variables fetched"));
       } catch (err) {
-        spinner.fail(
-          chalk.red(`Failed to fetch variables: ${(err as Error).message}`)
-        );
+        spinner.fail(chalk.red(`Failed to fetch variables: ${(err as Error).message}`));
         return;
       }
 
-      if (!Object.keys(vars).length) {
+      if (!Object.keys(encryptedVars).length) {
         console.log(chalk.yellow("⚠ No variables found to export."));
         return;
       }
 
       let selectedKeys: string[];
       try {
-        const exportAll = await confirm({
-          message: "Export ALL keys?",
-          default: true,
-        });
+        const exportAll = await safePrompt(() => confirm({ message: "Export ALL keys?", default: true }));
         if (exportAll) {
-          selectedKeys = Object.keys(vars);
+          selectedKeys = Object.keys(encryptedVars);
         } else {
-          selectedKeys = await checkbox({
-            message: "Select keys to export:",
-            choices: Object.keys(vars).map((k) => ({ name: k, value: k })),
-            loop: false,
-          });
-
+          selectedKeys = await safePrompt(() =>
+            checkbox({
+              message: "Select keys to export:",
+              choices: Object.keys(encryptedVars).map((k) => ({ name: k, value: k })),
+              loop: false,
+            })
+          );
           if (!selectedKeys.length) {
             console.log(chalk.yellow("⚠ No keys selected. Cancelled."));
             return;
@@ -102,26 +102,26 @@ export function exportCommand(program: Command) {
         existingVars = dotenv.parse(existingContent);
       }
 
-      // detect conflicts and skip same values
-      const conflicts = selectedKeys.filter((key) =>
-        Object.prototype.hasOwnProperty.call(existingVars, key)
-      );
-
-      const diffValues = conflicts.filter(
-        (key) => normalize(existingVars[key]) !== normalize(vars[key])
-      );
+      const conflicts = selectedKeys.filter((key) => Object.prototype.hasOwnProperty.call(existingVars, key));
+      const diffValues = conflicts.filter((key) => {
+        try {
+          const decryptedValue = decrypt(encryptedVars[key], pek);
+          return normalize(existingVars[key]) !== normalize(decryptedValue);
+        } catch {
+          return true; // Treat un-decryptable values as different
+        }
+      });
 
       let override = false;
       if (diffValues.length > 0) {
-        override = await confirm({
-          message: `The following keys already exist with different values: ${chalk.magenta(
-            diffValues.join(", ")
-          )}. Override them?`,
-          default: false,
-        });
+        override = await safePrompt(() =>
+          confirm({
+            message: `The following keys already exist with different values: ${chalk.magenta(diffValues.join(", "))}. Override them?`,
+            default: false,
+          })
+        );
       }
 
-      // Keys to write include new keys + overridden keys
       const newKeys = selectedKeys.filter((k) => !conflicts.includes(k));
       const keysToWrite = [...newKeys];
       if (override) {
@@ -129,9 +129,7 @@ export function exportCommand(program: Command) {
       }
 
       if (keysToWrite.length === 0) {
-        console.log(
-          chalk.green("✔ Nothing to export. Everything is already in sync.")
-        );
+        console.log(chalk.green("✔ Nothing to export. Everything is already in sync."));
         return;
       }
 
@@ -142,15 +140,11 @@ export function exportCommand(program: Command) {
         const lines = finalContent.split("\n");
         const newLines = lines.map((line) => {
           const trimmedLine = line.trim();
-          // Skip comments and empty lines
-          if (trimmedLine.startsWith("#") || !trimmedLine.includes("=")) {
-            return line;
-          }
+          if (trimmedLine.startsWith("#") || !trimmedLine.includes("=")) return line;
           const keyMatch = trimmedLine.match(/^([^=]+)=/);
           if (keyMatch) {
             const key = keyMatch[1].trim();
             if (keysToOverride.includes(key)) {
-              // Found a key to override, so comment out this line.
               return `# ${line} # overridden by redenv`;
             }
           }
@@ -159,18 +153,17 @@ export function exportCommand(program: Command) {
         finalContent = newLines.join("\n");
       }
 
-      // Prepare the content to append
       let contentToAppend = "";
       if (keysToWrite.length > 0) {
-        contentToAppend +=
-          finalContent.endsWith("\n\n") || finalContent.length === 0
-            ? ""
-            : "\n";
-        contentToAppend += `
-# Variables exported by redenv from ${projectName} (${environment}) at ${new Date().toISOString()}
-`;
+        contentToAppend += finalContent.endsWith("\n\n") || finalContent.length === 0 ? "" : "\n";
+        contentToAppend += `\n# Variables exported by redenv from ${projectName} (${environment}) at ${new Date().toISOString()}\n`;
         keysToWrite.forEach((key) => {
-          contentToAppend += `${key}="${vars[key]}"\n`;
+          try {
+            const decryptedValue = decrypt(encryptedVars[key], pek);
+            contentToAppend += `${key}="${decryptedValue}"\n`;
+          } catch {
+            contentToAppend += `# ${key}="[redenv: could not decrypt value]"\n`;
+          }
         });
       }
 
@@ -178,15 +171,9 @@ export function exportCommand(program: Command) {
 
       try {
         fs.writeFileSync(filePath, finalContent);
-        console.log(
-          chalk.green(
-            `✔ Exported ${keysToWrite.length} keys to ${chalk.blue(outputFile)}`
-          )
-        );
+        console.log(chalk.green(`✔ Exported ${keysToWrite.length} keys to ${chalk.blue(outputFile)}`));
       } catch (err) {
-        console.log(
-          chalk.red(`✘ Failed to write file: ${(err as Error).message}`)
-        );
+        console.log(chalk.red(`✘ Failed to write file: ${(err as Error).message}`));
       }
     });
 }

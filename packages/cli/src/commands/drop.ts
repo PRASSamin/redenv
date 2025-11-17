@@ -78,12 +78,12 @@ export function dropCommand(program: Command) {
         await redis.del(redisKey);
         spinner.succeed(
           chalk.green(
-            `✔ Successfully dropped environment "${envToDrop}" from project "${projectName}".`
+            `Successfully dropped environment "${envToDrop}" from project "${projectName}".`
           )
         );
       } catch (err) {
         spinner.fail(
-          chalk.red(`✘ Failed to drop environment: ${(err as Error).message}`)
+          chalk.red(`Failed to drop environment: ${(err as Error).message}`)
         );
       }
     });
@@ -108,31 +108,36 @@ export function dropCommand(program: Command) {
       }
 
       const spinner = ora(
-        `Fetching environments for project "${projectToDrop}"...`
+        `Fetching all data for project "${projectToDrop}"`
       ).start();
-      const keysToDelete = await scanAll(`*:${projectToDrop}`);
+      const envKeysToDelete = await scanAll(`*:${projectToDrop}`);
+      const metaKey = `meta@${projectToDrop}`;
+      const metaKeyExists = (await redis.exists(metaKey)) > 0;
+
       spinner.stop();
 
-      if (!keysToDelete.length) {
-        console.log(
-          chalk.red(
-            `✘ Project "${projectToDrop}" not found or has no environments.`
-          )
-        );
+      if (envKeysToDelete.length === 0 && !metaKeyExists) {
+        console.log(chalk.red(`✘ Project "${projectToDrop}" not found.`));
         return;
       }
 
-      const envsToDelete = keysToDelete.map((k) => k.split(":")[0]);
+      const keysToDelete = [...envKeysToDelete];
+      if (metaKeyExists) {
+        keysToDelete.push(metaKey);
+      }
+
+      const envsToDelete = envKeysToDelete.map((k) => k.split(":")[0]);
+      const confirmationMessage = `This will permanently delete the project "${chalk.cyan(
+        projectToDrop
+      )}", its metadata, and all of its ${ 
+        envsToDelete.length
+      } environment(s):\n  ${chalk.yellow(
+        envsToDelete.join(", ")
+      )}\n\n  This action cannot be undone. Are you sure?`;
 
       const confirmation = await safePrompt(() =>
         confirm({
-          message: `This will permanently delete the project "${chalk.cyan(
-            projectToDrop
-          )}" and all of its ${
-            keysToDelete.length
-          } environment(s):\n  ${chalk.yellow(
-            envsToDelete.join(", ")
-          )}\n\n  This action cannot be undone. Are you sure?`,
+          message: confirmationMessage,
           default: false,
         })
       );
@@ -144,21 +149,23 @@ export function dropCommand(program: Command) {
 
       const dropSpinner = ora(`Dropping project "${projectToDrop}"...`).start();
       try {
-        // Use a pipeline for atomic deletion
-        const p = redis.pipeline();
-        for (const key of keysToDelete) {
-          p.del(key);
+        if (keysToDelete.length > 0) {
+          // Use a pipeline for atomic deletion
+          const p = redis.pipeline();
+          for (const key of keysToDelete) {
+            p.del(key);
+          }
+          await p.exec();
         }
-        await p.exec();
 
         dropSpinner.succeed(
           chalk.green(
-            `✔ Successfully dropped project "${projectToDrop}" and its ${keysToDelete.length} environment(s).`
+            `Successfully dropped project "${projectToDrop}" and its associated data.`
           )
         );
       } catch (err) {
         dropSpinner.fail(
-          chalk.red(`✘ Failed to drop project: ${(err as Error).message}`)
+          chalk.red(`Failed to drop project: ${(err as Error).message}`)
         );
       }
     });

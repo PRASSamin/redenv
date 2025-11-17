@@ -6,6 +6,8 @@ import { select, checkbox, input } from "@inquirer/prompts";
 import { loadProjectConfig } from "../core/config";
 import { nameValidator, safePrompt, sanitizeName } from "../utils";
 import { fetchEnvironments, fetchProjects } from "../utils/redis";
+import { unlockProject } from "../core/keys";
+import { decrypt } from "../core/crypto";
 
 export function cloneCommand(program: Command) {
   program
@@ -22,38 +24,28 @@ export function cloneCommand(program: Command) {
       from = sanitizeName(from);
       to = sanitizeName(to);
 
-      // ---------------------------------------------------------
-      // CONFIG OR NO CONFIG BEHAVIOR
-      // ---------------------------------------------------------
       let config = options.project ? null : loadProjectConfig();
-
-      // If no project passed + using config, use config project
       project = project || config?.name;
+
       if (!project) {
         const projects = await fetchProjects();
-
         if (projects.length === 0) {
           console.log(chalk.red("✘ No projects found in Redis."));
           return;
         }
-
         project = await safePrompt(() =>
           select({
             message: "Select project:",
-            choices: projects,
+            choices: projects.map((p) => ({ name: p, value: p })),
           })
         );
       }
 
-      // ---------------------------------------------------------
-      // ASK ENVIRONMENTS IF MISSING
-      // ---------------------------------------------------------
-      const envs = (await fetchEnvironments(project || "")) || [];
+      const pek = await unlockProject(project);
 
+      const envs = (await fetchEnvironments(project)) || [];
       if (!envs.length || envs.length === 0) {
-        console.log(
-          chalk.red('✘ No environments found for project "' + project + '".')
-        );
+        console.log(chalk.red('✘ No environments found for project "' + project + '".'));
         return;
       }
 
@@ -61,7 +53,7 @@ export function cloneCommand(program: Command) {
         from = await safePrompt(() =>
           select({
             message: "Select source environment:",
-            choices: envs,
+            choices: envs.map((e) => ({ name: e, value: e })),
           })
         );
       }
@@ -70,7 +62,7 @@ export function cloneCommand(program: Command) {
         to = await safePrompt(() =>
           select({
             message: "Select destination environment:",
-            choices: [...envs.filter((e) => e !== from), "New environment"],
+            choices: [...envs.filter((e) => e !== from).map((e) => ({ name: e, value: e })), { name: "New environment", value: "New environment" }],
           })
         );
         if (to === "New environment") {
@@ -79,8 +71,7 @@ export function cloneCommand(program: Command) {
               required: true,
               message: "Enter new environment name:",
               validate: (input) => {
-                if (input === from)
-                  return "Environment name cannot be the same as source.";
+                if (input === from) return "Environment name cannot be the same as source.";
                 return nameValidator(input);
               },
             })
@@ -88,16 +79,12 @@ export function cloneCommand(program: Command) {
         }
       }
 
-      // ---------------------------------------------------------
-      // LOAD SOURCE + DEST VARS
-      // ---------------------------------------------------------
       const sourceKey = `${from}:${project}`;
       const destKey = `${to}:${project}`;
-
       const spinner = ora("Loading variables...").start();
 
-      let sourceVars = {};
-      let destVars = {};
+      let sourceVars: Record<string, string> = {};
+      let destVars: Record<string, string> = {};
 
       try {
         sourceVars = (await redis.hgetall(sourceKey)) || {};
@@ -113,88 +100,57 @@ export function cloneCommand(program: Command) {
         return;
       }
 
-      // ---------------------------------------------------------
-      // DETERMINE WHICH KEYS CAN BE CLONED
-      // ---------------------------------------------------------
       let missingKeys = Object.keys(sourceVars).filter((k) => !(k in destVars));
-
       if (missingKeys.length === 0) {
-        console.log(
-          chalk.green(
-            `✔ Everything is already synced! No new keys to clone from ${from} → ${to}.`
-          )
-        );
+        console.log(chalk.green(`✔ Everything is already synced! No new keys to clone from ${from} → ${to}.`));
         return;
       }
 
       let selectedKeys: string[] = [];
-
-      // User passed one specific key
       if (keyArg) {
         if (!missingKeys.includes(keyArg)) {
-          console.log(
-            chalk.yellow(
-              `✘ Key '${keyArg}' already exists in ${to} environment.`
-            )
-          );
+          console.log(chalk.yellow(`✘ Key '${keyArg}' already exists in ${to} environment.`));
           return;
         }
         selectedKeys = [keyArg];
       } else {
-        // Multi-select missing keys
-        try {
-          selectedKeys = await checkbox({
-            message: `Select keys to clone into ${to}:`,
+        selectedKeys = await safePrompt(() =>
+          checkbox({
+            message: `Select keys to clone into ${to}`,
             choices: missingKeys.map((k) => ({ name: k, value: k })),
             loop: false,
-          });
-        } catch (err) {
-          if (err instanceof Error && err.name === "ExitPromptError") {
-            console.log(chalk.yellow("Cancelled"));
-            return;
-          }
-          throw err;
-        }
-
+          })
+        );
         if (selectedKeys.length === 0) {
           console.log(chalk.yellow("✘ No keys selected."));
           return;
         }
       }
 
-      // Prepare data to push
-      const newData = {};
+      const newData: Record<string, string> = {};
       for (const k of selectedKeys) {
-        newData[k as keyof typeof sourceVars] =
-          sourceVars[k as keyof typeof sourceVars];
+        newData[k] = sourceVars[k];
       }
 
       console.log(chalk.cyan("\nKeys to clone:"));
-      for (const k of selectedKeys)
-        console.log(`  • ${k}=${sourceVars[k as keyof typeof sourceVars]}`);
+      for (const k of selectedKeys) {
+        try {
+          console.log(`  • ${k}=${decrypt(sourceVars[k], pek)}`);
+        } catch {
+          console.log(`  • ${k}=[could not decrypt value]`);
+        }
+      }
 
-      const confirm = await select({
-        message: "Proceed?",
-        choices: ["yes", "no"],
-      });
-
+      const confirm = await safePrompt(() => select({ message: "Proceed?", choices: [{name: "Yes", value: "yes"}, {name: "No", value: "no"}] }));
       if (confirm === "no") {
         console.log(chalk.yellow("✘ Cancelled."));
         return;
       }
 
-      // ---------------------------------------------------------
-      // APPLY CLONE
-      // ---------------------------------------------------------
       const apply = ora("Cloning...").start();
-
       try {
         await redis.hset(destKey, newData);
-        apply.succeed(
-          chalk.green(
-            `✔ Successfully cloned ${selectedKeys.length} key(s) from ${from} → ${to}!`
-          )
-        );
+        apply.succeed(chalk.green(`✔ Successfully cloned ${selectedKeys.length} key(s) from ${from} → ${to}!`));
       } catch (err) {
         apply.fail(chalk.red(`Failed: ${(err as Error).message}`));
       }
