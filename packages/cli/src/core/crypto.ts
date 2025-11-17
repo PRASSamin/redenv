@@ -75,11 +75,12 @@ export function encrypt(data: string, key: Buffer): string {
  * Decrypts data that was encrypted with the encrypt function.
  */
 export function decrypt(encryptedString: string, key: Buffer): string {
+  const parts = encryptedString.split(":");
+  if (parts.length !== 3) {
+    throw new Error("Invalid encrypted string format.");
+  }
+
   try {
-    const parts = encryptedString.split(":");
-    if (parts.length !== 3) {
-      throw new Error("Invalid encrypted string format.");
-    }
     const [ivHex, authTagHex, encryptedHex] = parts;
 
     const iv = Buffer.from(ivHex, "hex");
@@ -96,10 +97,10 @@ export function decrypt(encryptedString: string, key: Buffer): string {
 
     return decrypted.toString("utf8");
   } catch (error) {
-    // If decryption fails (e.g., wrong password/key), it will throw an error.
-    // We catch it to provide a more user-friendly message.
+    // This catch block now only handles actual cryptographic errors,
+    // such as an invalid authentication tag (which indicates a wrong key/password).
     throw new Error(
-      "Incorrect password or corrupted data. Please verify your password and try again."
+      "Decryption failed. This likely means an incorrect password was used or the data is corrupted."
     );
   }
 }

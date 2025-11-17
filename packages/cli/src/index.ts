@@ -29,6 +29,7 @@ import { logoutCommand } from "./commands/logout";
 import { changePasswordCommand } from "./commands/change-password";
 import { backupCommand } from "./commands/backup";
 import { restoreCommand } from "./commands/restore";
+import { tokenCommand } from "./commands/token";
 import path from "path";
 import { safePrompt } from "./utils";
 
@@ -90,6 +91,7 @@ async function main() {
     changePasswordCommand(program);
     backupCommand(program);
     restoreCommand(program);
+    tokenCommand(program);
 
     // Setup command
     program
