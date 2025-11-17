@@ -69,20 +69,24 @@ export function diffCommand(program: Command) {
 
       try {
         const [varsA, varsB] = await Promise.all([
-          redis.hgetall<Record<string, string>>(keyA) ?? {},
-          redis.hgetall<Record<string, string>>(keyB) ?? {},
+          redis.hgetall<Record<string, any>>(keyA) ?? {},
+          redis.hgetall<Record<string, any>>(keyB) ?? {},
         ]);
 
         for (const key in varsA) {
           try {
-            decryptedVarsA[key] = decrypt(varsA[key], pek);
+            const history = varsA[key];
+            if (!Array.isArray(history) || history.length === 0) throw new Error();
+            decryptedVarsA[key] = decrypt(history[0].value, pek);
           } catch {
             decryptedVarsA[key] = `[un-decryptable]`;
           }
         }
         for (const key in varsB) {
           try {
-            decryptedVarsB[key] = decrypt(varsB[key], pek);
+            const history = varsB[key];
+            if (!Array.isArray(history) || history.length === 0) throw new Error();
+            decryptedVarsB[key] = decrypt(history[0].value, pek);
           } catch {
             decryptedVarsB[key] = `[un-decryptable]`;
           }

@@ -53,9 +53,9 @@ export function viewCommand(program: Command) {
         ).start();
 
         const redisKey = `${environment}:${projectName}`;
-        const encryptedValue = await redis.hget(redisKey, key);
+        const history = await redis.hget(redisKey, key);
 
-        if (encryptedValue === null || encryptedValue === undefined) {
+        if (history === null || history === undefined) {
           spinner.fail(
             chalk.red(
               `Key '${key}' not found in ${projectName} (${environment}).`
@@ -68,16 +68,21 @@ export function viewCommand(program: Command) {
           chalk.greenBright(`Found key in ${projectName} (${environment})`)
         );
 
-        let decryptedValue: string;
+        let decryptedValue;
         try {
-          decryptedValue = decrypt(encryptedValue as string, pek);
+          if (!Array.isArray(history) || history.length === 0) {
+            throw new Error("History format is invalid.");
+          }
+          const latestVersion = history[0];
+          decryptedValue = decrypt(latestVersion.value, pek);
         } catch (e) {
           console.log(
             chalk.yellow(
-              `\n⚠️  Could not decrypt the value for '${key}'. It might not be encrypted or the project key is incorrect.`
+              `\n⚠️  Could not decrypt the value for '${key}'. It might be corrupted or the project key is incorrect.`
             )
           );
-          decryptedValue = encryptedValue as string; // Show the raw value as a fallback
+          // In case of error, show the raw JSON for debugging
+          decryptedValue = history;
         }
 
         const table = new Table({
@@ -91,7 +96,9 @@ export function viewCommand(program: Command) {
       } catch (err) {
         // Errors from unlockProject are handled within the function, so this will catch other errors.
         console.log(
-          chalk.red(`\n✘ An unexpected error occurred: ${(err as Error).message}`)
+          chalk.red(
+            `\n✘ An unexpected error occurred: ${(err as Error).message}`
+          )
         );
       }
     });

@@ -54,16 +54,16 @@ export function exportCommand(program: Command) {
 
       const redisKey = `${environment}:${projectName}`;
       const spinner = ora(`Fetching variables from ${projectName} (${environment})...`).start();
-      let encryptedVars: Record<string, string> = {};
+      let versionedVars: Record<string, any> = {};
       try {
-        encryptedVars = (await redis.hgetall(redisKey)) || {};
+        versionedVars = (await redis.hgetall(redisKey)) || {};
         spinner.succeed(chalk.green("Variables fetched"));
       } catch (err) {
         spinner.fail(chalk.red(`Failed to fetch variables: ${(err as Error).message}`));
         return;
       }
 
-      if (!Object.keys(encryptedVars).length) {
+      if (!Object.keys(versionedVars).length) {
         console.log(chalk.yellow("⚠ No variables found to export."));
         return;
       }
@@ -72,12 +72,12 @@ export function exportCommand(program: Command) {
       try {
         const exportAll = await safePrompt(() => confirm({ message: "Export ALL keys?", default: true }));
         if (exportAll) {
-          selectedKeys = Object.keys(encryptedVars);
+          selectedKeys = Object.keys(versionedVars);
         } else {
           selectedKeys = await safePrompt(() =>
             checkbox({
               message: "Select keys to export:",
-              choices: Object.keys(encryptedVars).map((k) => ({ name: k, value: k })),
+              choices: Object.keys(versionedVars).map((k) => ({ name: k, value: k })),
               loop: false,
             })
           );
@@ -105,7 +105,9 @@ export function exportCommand(program: Command) {
       const conflicts = selectedKeys.filter((key) => Object.prototype.hasOwnProperty.call(existingVars, key));
       const diffValues = conflicts.filter((key) => {
         try {
-          const decryptedValue = decrypt(encryptedVars[key], pek);
+          const history = versionedVars[key];
+          if (!Array.isArray(history) || history.length === 0) return true;
+          const decryptedValue = decrypt(history[0].value, pek);
           return normalize(existingVars[key]) !== normalize(decryptedValue);
         } catch {
           return true; // Treat un-decryptable values as different
@@ -159,7 +161,9 @@ export function exportCommand(program: Command) {
         contentToAppend += `\n# Variables exported by redenv from ${projectName} (${environment}) at ${new Date().toISOString()}\n`;
         keysToWrite.forEach((key) => {
           try {
-            const decryptedValue = decrypt(encryptedVars[key], pek);
+            const history = versionedVars[key];
+            if (!Array.isArray(history) || history.length === 0) throw new Error();
+            const decryptedValue = decrypt(history[0].value, pek);
             contentToAppend += `${key}="${decryptedValue}"\n`;
           } catch {
             contentToAppend += `# ${key}="[redenv: could not decrypt value]"\n`;

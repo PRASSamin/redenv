@@ -1,14 +1,12 @@
 import chalk from "chalk";
 import { Command } from "commander";
 import ora from "ora";
-import { redis } from "../core/upstash";
 import { loadProjectConfig } from "../core/config";
 import { safePrompt, sanitizeName } from "../utils";
-import { fetchEnvironments } from "../utils/redis";
+import { fetchEnvironments, writeSecret } from "../utils/redis";
 import { select } from "@inquirer/prompts";
 import { multiline } from "@cli-prompts/multiline";
 import { unlockProject } from "../core/keys";
-import { encrypt } from "../core/crypto";
 
 export function editCommand(program: Command) {
   program
@@ -29,9 +27,9 @@ export function editCommand(program: Command) {
         return;
       }
 
-      const projectName = 
+      const projectName =
         sanitizeName(options.project) || projectConfig?.name!;
-      let environment = 
+      let environment =
         sanitizeName(options.env) || projectConfig?.environment;
 
       if (!environment) {
@@ -45,24 +43,13 @@ export function editCommand(program: Command) {
         );
       }
 
+      let spinner;
       try {
         const pek = await unlockProject(projectName);
 
-        const redisKey = `${environment}:${projectName}`;
-
-        const exists = await redis.hexists(redisKey, key);
-        if (!exists) {
-          console.log(
-            chalk.yellow(
-              `Key '${key}' doesn’t exist in ${projectName} (${environment}).\nUse 'redenv add ${key} <value>' to create it.`
-            )
-          );
-          return;
-        }
-
         const newValue = await safePrompt(() =>
           multiline({
-            prompt: "Enter new value:",
+            prompt: `Enter new value for ${chalk.cyan(key)}`,
             required: true,
             validate(value) {
               if (!value.trim()) return "You must enter something.";
@@ -71,14 +58,15 @@ export function editCommand(program: Command) {
           })
         );
 
-        const spinner = ora(
+        spinner = ora(
           `Updating ${chalk.cyan(key)} in ${chalk.yellow(
             projectName
           )} (${environment})...`
         ).start();
 
-        const encryptedValue = encrypt(newValue, pek);
-        await redis.hset(redisKey, { [key]: encryptedValue });
+        await writeSecret(projectName, environment, key, newValue, pek, {
+          isNew: false,
+        });
 
         spinner.succeed(
           chalk.greenBright(
@@ -88,10 +76,15 @@ export function editCommand(program: Command) {
           )
         );
       } catch (err) {
-        // Errors from unlockProject are handled, so this will catch other issues.
-        console.log(
-          chalk.red(`\n✘ Failed to update '${key}': ${(err as Error).message}`)
-        );
+        const error = err as Error;
+        if (spinner && spinner.isSpinning) {
+          spinner.fail(chalk.red(error.message));
+        } else if (error.name !== "ExitPromptError") {
+          console.log(
+            chalk.red(`\n✘ An unexpected error occurred: ${error.message}`)
+          );
+        }
+        process.exit(1);
       }
     });
 }

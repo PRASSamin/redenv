@@ -1,12 +1,10 @@
 import chalk from "chalk";
 import ora from "ora";
-import { redis } from "../core/upstash";
 import { Command } from "commander";
 import { loadProjectConfig } from "../core/config";
 import { sanitizeName, safePrompt } from "../utils";
 import { unlockProject } from "../core/keys";
-import { encrypt } from "../core/crypto";
-import { fetchEnvironments } from "../utils/redis";
+import { fetchEnvironments, writeSecret } from "../utils/redis";
 import { select } from "@inquirer/prompts";
 
 export function addCommand(program: Command) {
@@ -31,7 +29,7 @@ export function addCommand(program: Command) {
 
       const projectName =
         sanitizeName(options.project) || projectConfig?.name!;
-      let environment = 
+      let environment =
         sanitizeName(options.env) || projectConfig?.environment;
 
       if (!environment) {
@@ -44,31 +42,19 @@ export function addCommand(program: Command) {
         );
       }
 
+      let spinner: ora.Ora | undefined;
       try {
-        // Unlock project and get encryption key
         const pek = await unlockProject(projectName);
-
-        const spinner = ora(
+        spinner = ora(
           `Adding ${chalk.cyan(key)} to ${chalk.yellow(
             projectName
           )} (${environment})...`
         ).start();
 
-        const redisKey = `${environment}:${projectName}`;
-        const exists = await redis.hexists(redisKey, key);
-        if (exists) {
-          spinner.fail(
-            chalk.yellow(
-              `Key '${key}' already exists in ${projectName} (${environment}).\n\nUse 'redenv edit ${key} <newValue>' to update it.`
-            )
-          );
-          return;
-        }
+        await writeSecret(projectName, environment, key, value, pek, {
+          isNew: true,
+        });
 
-        // Encrypt the value before storing
-        const encryptedValue = encrypt(value, pek);
-
-        await redis.hset(redisKey, { [key]: encryptedValue });
         spinner.succeed(
           chalk.greenBright(
             `Added '${key}' → ${chalk.cyan(
@@ -77,14 +63,15 @@ export function addCommand(program: Command) {
           )
         );
       } catch (err) {
-        // The spinner may not be initialized if unlockProject fails, so check for it.
-        if (ora().spinner) {
-          ora().fail(
-            chalk.red(`Failed to add '${key}': ${(err as Error).message}`)
+        const error = err as Error;
+        if (spinner && spinner.isSpinning) {
+          spinner.fail(chalk.red(error.message));
+        } else if (error.name !== "ExitPromptError") {
+          console.log(
+            chalk.red(`\n✘ An unexpected error occurred: ${error.message}`)
           );
-        } else {
-          // unlockProject already logs its own errors, so we might not need to log again.
         }
+        process.exit(1);
       }
     });
 }

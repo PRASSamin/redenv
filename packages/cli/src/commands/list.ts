@@ -19,7 +19,8 @@ async function fetchAndDisplayVariables(
     `Fetching variables for ${projectName} (${environment})...`
   ).start();
   try {
-    const envs = await redis.hgetall<Record<string, string>>(redisKey);
+    // The `hgetall` method from `@upstash/redis` automatically parses JSON strings into objects.
+    const envs = await redis.hgetall<Record<string, any>>(redisKey);
     spinner.stop();
 
     if (!envs || Object.keys(envs).length === 0) {
@@ -42,14 +43,18 @@ async function fetchAndDisplayVariables(
     });
 
     const sorted = Object.entries(envs).sort(([a], [b]) => a.localeCompare(b));
-    for (const [key, value] of sorted) {
+    for (const [key, history] of sorted) {
       try {
-        const decryptedValue = decrypt(value, decryptionKey);
+        if (!Array.isArray(history) || history.length === 0) {
+          throw new Error("Invalid history format");
+        }
+        const latestVersion = history[0];
+        const decryptedValue = decrypt(latestVersion.value, decryptionKey);
         table.push([chalk.blue(key), chalk.green(decryptedValue)]);
       } catch (e) {
         table.push([
           chalk.blue(key),
-          chalk.yellow(`[Could not decrypt value]`),
+          chalk.yellow(`[Corrupted or invalid data]`),
         ]);
       }
     }
@@ -65,8 +70,7 @@ async function fetchAndDisplayVariables(
 export function listCommand(program: Command) {
   program
     .command("list")
-    .description("List all ENV variables")
-    .option("--skip-config", "Do not use project configuration")
+    .description("List all ENV variables for a project")
     .option("-p, --project <name>", "Specify project name")
     .option("-e, --env <env>", "Specify environment")
     .action(async (options) => {
@@ -74,49 +78,26 @@ export function listCommand(program: Command) {
       const projectOption = sanitizeName(options.project);
       const envOption = sanitizeName(options.env);
 
-      // Handle interactive flow when no project is specified
-      if (options.skipConfig || !projectConfig) {
-        const projects = await fetchProjects();
-        const selectedProject = await safePrompt(() =>
-          select({
-            message: "Select one or more environments to view",
-            choices: projects,
-            loop: false,
-          })
+      const projectName = projectOption || projectConfig?.name;
+      if (!projectName) {
+        console.log(
+          chalk.red(
+            "No project specified. Use `redenv list -p <project-name>` or run from a registered project directory."
+          )
         );
-        const pek = await unlockProject(selectedProject as string);
-
-        const envs = await fetchEnvironments(selectedProject as string);
-
-        if (envs.length === 0) {
-          console.log(
-            chalk.yellow("No environments found across any project.")
-          );
-          return;
-        }
-
-        const selectedEnvs = await checkbox({
-          message: "Select one or more environments to view",
-          required: true,
-          choices: envs.map((p) => ({ name: p, value: p })),
-        });
-
-        for (const selection of selectedEnvs) {
-          await fetchAndDisplayVariables(
-            `${selection}:${selectedProject}`,
-            pek
-          );
-        }
         return;
       }
 
-      // Handle flows where a project is specified or found in config
-      const projectName = projectOption || projectConfig?.name;
-      if (projectName) {
+      try {
         const pek = await unlockProject(projectName);
         let environment = envOption || projectConfig?.environment;
+
         if (!environment) {
           const envs = await fetchEnvironments(projectName, true);
+          if (envs.length === 0) {
+            console.log(chalk.yellow(`No environments found for project "${projectName}".`));
+            return;
+          }
           environment = await safePrompt(() =>
             select({
               message: "Select environment:",
@@ -124,9 +105,14 @@ export function listCommand(program: Command) {
             })
           );
         }
+
         const redisKey = `${environment}:${projectName}`;
         await fetchAndDisplayVariables(redisKey, pek);
-        return;
+      } catch (err) {
+        // Errors from unlockProject are handled, so we don't need to log them again
+        if ((err as Error).name !== 'ExitPromptError') {
+            console.log(chalk.red(`\n✘ An unexpected error occurred: ${(err as Error).message}`));
+        }
       }
     });
 }

@@ -2,6 +2,8 @@ import ora from "ora";
 import { redis } from "../core/upstash";
 import chalk from "chalk";
 import { exit } from "process";
+import { getAuditUser } from "./index";
+import { encrypt } from "../core/crypto";
 
 export async function scanAll(match: string, count = 100): Promise<string[]> {
   let cursor = 0;
@@ -54,9 +56,58 @@ export const fetchProjects = async (): Promise<string[]> => {
     const keys = await scanAll("*@*");
     spinner.stop();
 
-    return Array.from(new Set(keys.map((k) =>  k.split("@")[1])));
+    return Array.from(new Set(keys.map((k) => k.split("@")[1])));
   } catch (err) {
     spinner.fail();
     throw new Error(`Failed to fetch projects: ${(err as Error).message}`);
   }
 };
+
+/**
+ * Handles the complete "read-modify-write" cycle for updating a secret's
+ * version history.
+ */
+export async function writeSecret(
+  projectName: string,
+  environment: string,
+  key: string,
+  newValue: string,
+  pek: Buffer,
+  options: { isNew: boolean }
+) {
+  const redisKey = `${environment}:${projectName}`;
+
+  const exists = (await redis.hexists(redisKey, key)) > 0;
+
+  if (options.isNew && exists) {
+    throw new Error(`Key '${key}' already exists. Use 'redenv edit' to update it.`);
+  }
+  if (!options.isNew && !exists) {
+    throw new Error(`Key '${key}' does not exist. Use 'redenv add' to create it.`);
+  }
+
+  const metaKey = `meta@${projectName}`;
+  const [metadata, currentHistoryJSON] = await Promise.all([
+    redis.hgetall<{ historyLimit?: number }>(metaKey),
+    redis.hget(redisKey, key) as Promise<string | null>,
+  ]);
+
+  const history = currentHistoryJSON ? JSON.parse(currentHistoryJSON) : [];
+  const lastVersion = history[0]?.version || 0;
+  const user = getAuditUser();
+
+  const newVersion = {
+    version: lastVersion + 1,
+    value: encrypt(newValue, pek),
+    user: user,
+    createdAt: new Date().toISOString(),
+  };
+
+  history.unshift(newVersion);
+
+  const limit = metadata?.historyLimit ?? 10;
+  const trimmedHistory = limit > 0 ? history.slice(0, limit) : history;
+
+  const valueToStore = JSON.stringify(trimmedHistory);
+  await redis.hset(redisKey, { [key]: valueToStore });
+}

@@ -1,8 +1,9 @@
 import chalk from "chalk";
 import ora from "ora";
 import { exit } from "process";
-import { PROJECT_CONFIG_PATH } from "../core/config";
+import { PROJECT_CONFIG_PATH, loadGlobalConfig } from "../core/config";
 import fs from "fs";
+import os from "os";
 
 export async function safePrompt<T>(promptFn: () => Promise<T>): Promise<T> {
   try {
@@ -16,6 +17,21 @@ export async function safePrompt<T>(promptFn: () => Promise<T>): Promise<T> {
       exit(1);
     }
     throw err;
+  }
+}
+
+export function getAuditUser(): string {
+  const globalConfig = loadGlobalConfig();
+  if (globalConfig && globalConfig.email) {
+    return globalConfig.email;
+  }
+  try {
+    const userInfo = os.userInfo();
+    const hostname = os.hostname();
+    return `${userInfo.username}@${hostname}`;
+  } catch (e) {
+    // Failsafe in very restricted environments
+    return "unknown-user";
   }
 }
 

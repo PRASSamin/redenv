@@ -83,8 +83,8 @@ export function cloneCommand(program: Command) {
       const destKey = `${to}:${project}`;
       const spinner = ora("Loading variables...").start();
 
-      let sourceVars: Record<string, string> = {};
-      let destVars: Record<string, string> = {};
+      let sourceVars: Record<string, any> = {};
+      let destVars: Record<string, any> = {};
 
       try {
         sourceVars = (await redis.hgetall(sourceKey)) || {};
@@ -116,7 +116,7 @@ export function cloneCommand(program: Command) {
       } else {
         selectedKeys = await safePrompt(() =>
           checkbox({
-            message: `Select keys to clone into ${to}`,
+            message: `Select keys to clone into ${to}:`,
             choices: missingKeys.map((k) => ({ name: k, value: k })),
             loop: false,
           })
@@ -127,7 +127,7 @@ export function cloneCommand(program: Command) {
         }
       }
 
-      const newData: Record<string, string> = {};
+      const newData: Record<string, any> = {};
       for (const k of selectedKeys) {
         newData[k] = sourceVars[k];
       }
@@ -135,9 +135,12 @@ export function cloneCommand(program: Command) {
       console.log(chalk.cyan("\nKeys to clone:"));
       for (const k of selectedKeys) {
         try {
-          console.log(`  • ${k}=${decrypt(sourceVars[k], pek)}`);
+          const history = sourceVars[k];
+          if (!Array.isArray(history) || history.length === 0) throw new Error();
+          const latestValue = decrypt(history[0].value, pek);
+          console.log(`  • ${k}=${latestValue}`);
         } catch {
-          console.log(`  • ${k}=[could not decrypt value]`);
+          console.log(`  • ${k}=[could not display value]`);
         }
       }
 
@@ -149,8 +152,12 @@ export function cloneCommand(program: Command) {
 
       const apply = ora("Cloning...").start();
       try {
-        await redis.hset(destKey, newData);
-        apply.succeed(chalk.green(`✔ Successfully cloned ${selectedKeys.length} key(s) from ${from} → ${to}!`));
+        const dataToStore: Record<string, string> = {};
+        for(const key in newData) {
+            dataToStore[key] = JSON.stringify(newData[key]);
+        }
+        await redis.hset(destKey, dataToStore);
+        apply.succeed(chalk.green(`Successfully cloned ${selectedKeys.length} key(s) from ${from} → ${to}!`));
       } catch (err) {
         apply.fail(chalk.red(`Failed: ${(err as Error).message}`));
       }

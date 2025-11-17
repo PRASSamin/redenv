@@ -2,14 +2,14 @@ import fs from "fs";
 import chalk from "chalk";
 import ora from "ora";
 import { Command } from "commander";
-import { redis } from "../core/upstash";
 import { loadProjectConfig } from "../core/config";
 import { confirm, input, select } from "@inquirer/prompts";
 import { nameValidator, normalize, safePrompt, sanitizeName } from "../utils";
-import { fetchEnvironments, fetchProjects } from "../utils/redis";
+import { fetchEnvironments, fetchProjects, writeSecret } from "../utils/redis";
 import dotenv from "dotenv";
 import { unlockProject } from "../core/keys";
-import { decrypt, encrypt } from "../core/crypto";
+import { decrypt } from "../core/crypto";
+import { redis } from "../core/upstash";
 
 export function importCommand(program: Command) {
   program
@@ -29,7 +29,6 @@ export function importCommand(program: Command) {
       let projectName = sanitizeName(options.project) || config?.name;
       let environment = sanitizeName(options.env) || config?.environment;
 
-      // --- Project and Environment Selection ---
       if (!projectName) {
         const projects = await fetchProjects();
         projectName = await safePrompt(() =>
@@ -68,10 +67,8 @@ export function importCommand(program: Command) {
         }
       }
 
-      // --- Unlock Project ---
       const pek = await unlockProject(projectName);
 
-      // --- Parse .env file ---
       const spinner = ora("Parsing .env file...").start();
       let parsed: Record<string, string> = {};
       try {
@@ -83,15 +80,14 @@ export function importCommand(program: Command) {
         return;
       }
 
-      // --- Compare with remote ---
       const redisKey = `${environment}:${projectName}`;
-      const spinner2 = ora("Fetching and decrypting existing variables...").start();
-      let existing: Record<string, string> = {};
+      spinner.start("Fetching and decrypting existing variables...");
+      let existing: Record<string, any> = {};
       try {
         existing = (await redis.hgetall(redisKey)) || {};
-        spinner2.succeed(chalk.green("Loaded existing vars"));
+        spinner.succeed(chalk.green("Loaded existing vars"));
       } catch (err) {
-        spinner2.fail(chalk.red("Failed to load existing environment"));
+        spinner.fail(chalk.red("Failed to load existing environment"));
         return;
       }
 
@@ -101,8 +97,7 @@ export function importCommand(program: Command) {
       const newKeys = keysInFile.filter((k) => !keysInRedis.includes(k));
 
       const keysToImport: string[] = [];
-      const skippedKeys: string[] = [];
-
+      
       console.log("");
       if (conflictingKeys.length > 0) {
         console.log(chalk.yellow(`⚠ The following keys already exist in ${environment}:${projectName}:\n`));
@@ -112,15 +107,14 @@ export function importCommand(program: Command) {
           const newValue = normalize(parsed[k]);
           let existingValue = "";
           try {
-            existingValue = normalize(decrypt(existing[k], pek));
+            const history = existing[k];
+            if (!Array.isArray(history) || history.length === 0) throw new Error();
+            existingValue = normalize(decrypt(history[0].value, pek));
           } catch {
-            // If decryption fails, treat it as a different value
-            existingValue = `[un-decryptable value] ${existing[k]}`;
+            existingValue = `[un-decryptable or invalid format]`;
           }
 
-          if (existingValue === newValue) {
-            skippedKeys.push(k);
-          } else {
+          if (existingValue !== newValue) {
             keysWithDiff.push(k);
             console.log(chalk.yellow(`~ ${k}   current="${existingValue}" | new="${newValue}"`));
           }
@@ -151,17 +145,15 @@ export function importCommand(program: Command) {
         return;
       }
 
-      // --- Encrypt and Upload ---
-      const spinner3 = ora("Encrypting and importing variables...").start();
+      spinner.start("Encrypting and importing variables...");
       try {
-        const finalObject: Record<string, string> = {};
         for (const key of keysToImport) {
-          finalObject[key] = encrypt(parsed[key], pek);
+            const isNew = !keysInRedis.includes(key);
+            await writeSecret(projectName, environment, key, parsed[key], pek, { isNew });
         }
-        await redis.hset(redisKey, finalObject);
-        spinner3.succeed(chalk.green(`Imported ${keysToImport.length} variable(s).`));
+        spinner.succeed(chalk.green(`Imported ${keysToImport.length} variable(s).`));
       } catch (err) {
-        spinner3.fail(chalk.red(`Failed to import variables: ${(err as Error).message}`));
+        spinner.fail(chalk.red(`Failed to import variables: ${(err as Error).message}`));
       }
 
       console.log("");

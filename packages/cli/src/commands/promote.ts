@@ -1,9 +1,5 @@
 import chalk from "chalk";
-import ora from "ora";
-import fs from "fs";
-import os from "os";
-import path from "path";
-import { execSync } from "child_process";
+import ora, { Ora } from "ora";
 import { Command } from "commander";
 import { redis } from "../core/upstash";
 import { loadProjectConfig } from "../core/config";
@@ -11,8 +7,9 @@ import { nameValidator, safePrompt, writeProjectConfig } from "../utils";
 import { input } from "@inquirer/prompts";
 import dotenv from "dotenv";
 import { unlockProject } from "../core/keys";
-import { decrypt, encrypt } from "../core/crypto";
+import { decrypt } from "../core/crypto";
 import { multiline } from "@cli-prompts/multiline";
+import { writeSecret } from "../utils/redis";
 
 export function promoteCommand(program: Command) {
   program
@@ -49,10 +46,11 @@ export function promoteCommand(program: Command) {
         writeProjectConfig({ productionEnvironment: promotionEnvironment });
       }
 
+      let spinner: Ora | undefined;
       try {
         const pek = await unlockProject(projectName);
 
-        const spinner = ora(
+        spinner = ora(
           `Fetching variables from ${environment} and ${promotionEnvironment}...`
         ).start();
 
@@ -60,8 +58,8 @@ export function promoteCommand(program: Command) {
         const prodKey = `${promotionEnvironment}:${projectName}`;
 
         const [devVars, prodVars] = await Promise.all([
-          redis.hgetall<Record<string, string>>(devKey),
-          redis.hgetall<Record<string, string>>(prodKey),
+          redis.hgetall<Record<string, any>>(devKey),
+          redis.hgetall<Record<string, any>>(prodKey),
         ]);
         spinner.stop();
 
@@ -89,7 +87,10 @@ export function promoteCommand(program: Command) {
         const decryptedNewKeys: Record<string, string> = {};
         for (const key in newKeys) {
           try {
-            decryptedNewKeys[key] = decrypt(newKeys[key], pek);
+            const history = newKeys[key];
+            if (!Array.isArray(history) || history.length === 0)
+              throw new Error();
+            decryptedNewKeys[key] = decrypt(history[0].value, pek);
           } catch {
             decryptedNewKeys[key] = "[redenv: could not decrypt]";
           }
@@ -100,16 +101,14 @@ export function promoteCommand(program: Command) {
           .map(([k, v]) => `${k}="${v}"`)
           .join("\n");
 
-        console.log(
-          chalk.cyan(`📝 Loaded ${Object.keys(newKeys).length} keys.`)
-        );
-
         const updatedValues = await safePrompt(() =>
           multiline({
-            prompt: "Edit values to promote:",
+            prompt: "Review and edit the variables to be promoted:",
             required: true,
             spinner: true,
             default: envContent,
+            validate: (v) =>
+              v.trim().length > 0 || "Cannot promote empty values.",
           })
         );
 
@@ -127,27 +126,38 @@ export function promoteCommand(program: Command) {
           return;
         }
 
-        const uploadSpinner = ora(
-          `Encrypting and promoting new variables to ${promotionEnvironment}...`
-        ).start();
-        const encryptedFinalVars: Record<string, string> = {};
+        spinner.start(
+          `Encrypting and promoting ${
+            Object.keys(finalVarsToPromote).length
+          } variable(s) to ${promotionEnvironment}...`
+        );
+
         for (const key in finalVarsToPromote) {
-          encryptedFinalVars[key] = encrypt(finalVarsToPromote[key], pek);
+          await writeSecret(
+            projectName,
+            promotionEnvironment,
+            key,
+            finalVarsToPromote[key],
+            pek,
+            { isNew: true }
+          );
         }
 
-        await redis.hset(prodKey, encryptedFinalVars);
-        uploadSpinner.succeed(
+        spinner.succeed(
           chalk.greenBright(
             `New keys promoted to ${promotionEnvironment} successfully!`
           )
         );
       } catch (err) {
-        // Errors from unlockProject are handled, so this will catch other issues.
-        console.log(
-          chalk.red(
-            `\n✘ An unexpected error occurred: ${(err as Error).message}`
-          )
-        );
+        const error = err as Error;
+        if (spinner && spinner.isSpinning) {
+          spinner.fail(chalk.red(error.message));
+        } else if (error.name !== "ExitPromptError") {
+          console.log(
+            chalk.red(`\n✘ An unexpected error occurred: ${error.message}`)
+          );
+        }
+        process.exit(1);
       }
     });
 }

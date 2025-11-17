@@ -30,6 +30,8 @@ import { changePasswordCommand } from "./commands/change-password";
 import { backupCommand } from "./commands/backup";
 import { restoreCommand } from "./commands/restore";
 import { tokenCommand } from "./commands/token";
+import { historyCommand } from "./commands/history";
+import { rollbackCommand } from "./commands/rollback";
 import path from "path";
 import { safePrompt } from "./utils";
 
@@ -92,6 +94,8 @@ async function main() {
     backupCommand(program);
     restoreCommand(program);
     tokenCommand(program);
+    historyCommand(program);
+    rollbackCommand(program);
 
     // Setup command
     program
@@ -176,10 +180,19 @@ async function main() {
             createdAt: new Date().toISOString(),
           });
 
+          const email = await safePrompt(() =>
+            input({
+              message: "Please enter your email for auditing purposes:",
+              validate: (val) =>
+                val.includes("@") ? true : "Please enter a valid email.",
+            })
+          );
+
           // Save to global config
           const data = {
             url: urlAns,
             token: tokenAns,
+            email: email,
             createdAt: new Date().toISOString(),
           };
 

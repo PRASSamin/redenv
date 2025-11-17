@@ -20,8 +20,9 @@ export function registerCommand(program: Command) {
     .argument("<project>", "Project name")
     .argument("[env]", "Project environment", "development")
     .argument("[prodEnv]", "Production environment", "production")
+    .option("-l, --history-limit <number>", "Number of history entries to keep per secret", "10")
     .description("Register a new project or connect to an existing one")
-    .action(async (project, env, prodEnv) => {
+    .action(async (project, env, prodEnv, options) => {
       const sanitizedProject = sanitizeName(project);
       const sanitizedEnv = sanitizeName(env);
       const sanitizedProdEnv = sanitizeName(prodEnv);
@@ -96,7 +97,7 @@ export function registerCommand(program: Command) {
         })
       );
 
-      spinner.info("Encrypting and registering project...");
+      spinner.start("Encrypting and registering project...");
       try {
         const salt = generateSalt();
         const projectEncryptionKey = generateRandomKey();
@@ -106,9 +107,15 @@ export function registerCommand(program: Command) {
           passwordDerivedKey
         );
 
+        const historyLimit = parseInt(options.historyLimit, 10);
+        if (isNaN(historyLimit) || historyLimit < 0) {
+            throw new Error("History limit must be a non-negative number.");
+        }
+
         const metadata = {
           encryptedPEK: encryptedPEK,
           salt: salt.toString("hex"),
+          historyLimit: historyLimit,
           kdf: "scrypt",
           algorithm: "aes-256-gcm",
           createdAt: new Date().toISOString(),
@@ -125,7 +132,7 @@ export function registerCommand(program: Command) {
 
         spinner.succeed(
           chalk.green(
-            `✔ Project "${sanitizedProject}" registered and encrypted successfully!`
+            `Project "${sanitizedProject}" registered and encrypted successfully!`
           )
         );
         console.log(
@@ -135,7 +142,7 @@ export function registerCommand(program: Command) {
         );
       } catch (err) {
         spinner.fail(
-          chalk.red(`✘ Failed to register project: ${(err as Error).message}`)
+          chalk.red(`Failed to register project: ${(err as Error).message}`)
         );
       }
     });
