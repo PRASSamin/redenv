@@ -24,7 +24,7 @@ export function cloneCommand(program: Command) {
       from = sanitizeName(from);
       to = sanitizeName(to);
 
-      let config = options.project ? null : loadProjectConfig();
+      const config = options.project ? null : loadProjectConfig();
       project = project || config?.name;
 
       if (!project) {
@@ -100,7 +100,7 @@ export function cloneCommand(program: Command) {
         return;
       }
 
-      let missingKeys = Object.keys(sourceVars).filter((k) => !(k in destVars));
+      const missingKeys = Object.keys(sourceVars).filter((k) => !(k in destVars));
       if (missingKeys.length === 0) {
         console.log(chalk.green(`✔ Everything is already synced! No new keys to clone from ${from} → ${to}.`));
         return;

@@ -107,7 +107,6 @@ async function main() {
 
         const memory = loadMemoryConfig();
 
-        try {
           if (memory.length === 0) {
             // First time run or empty memory
             console.log(chalk.blue("Setting up new Upstash credentials..."));
@@ -132,7 +131,7 @@ async function main() {
               select({
                 message: "Select Upstash credentials:",
                 choices: [
-                  // @ts-ignore
+                  // @ts-expect-error: Type narrowing issue with union type - handling Credential | "new" union
                   ...memory
                     .map((mem) => ({
                       name: `${mem.url} | ****${mem.token.slice(
@@ -143,7 +142,7 @@ async function main() {
                     .filter(
                       (mem) => mem.name !== undefined && mem.name !== null
                     ),
-                  // @ts-ignore
+                  // @ts-expect-error: Type narrowing issue with union type - handling Credential | "new" union
                   { name: "✨ Use new credentials", value: "new" },
                 ],
               })
@@ -203,9 +202,6 @@ async function main() {
 
           fs.writeFileSync(GLOBAL_CONFIG_PATH, JSON.stringify(data, null, 2));
           console.log(chalk.green("\n✔ Global config saved successfully!"));
-        } catch (err) {
-          throw err;
-        }
       });
 
     await program.parseAsync(process.argv);

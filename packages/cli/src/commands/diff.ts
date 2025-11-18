@@ -64,8 +64,8 @@ export function diffCommand(program: Command) {
       const keyB = `${envB}:${projectName}`;
 
       const spinner = ora(`Fetching and decrypting variables...`).start();
-      let decryptedVarsA: Record<string, string> = {};
-      let decryptedVarsB: Record<string, string> = {};
+      const decryptedVarsA: Record<string, string> = {};
+      const decryptedVarsB: Record<string, string> = {};
 
       try {
         const [varsA, varsB] = await Promise.all([

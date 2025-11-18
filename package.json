@@ -1,17 +1,32 @@
 {
   "name": "redenv",
-  "version": "1.0.0",
-  "author": "",
+  "version": "0.0.0",
+  "author": {
+    "name": "PRAS",
+    "email": "prassamin@gmail.com",
+    "url": "https://pras.me"
+  },
   "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "test": "vitest",
+    "build": "pnpm --filter \"./packages/**\" build",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "changeset publish",
+    "lint": "eslint ./packages --ext .ts,.tsx"
+  },
   "devDependencies": {
+    "@changesets/cli": "^2.29.7",
+    "@changesets/types": "^6.1.0",
+    "@eslint/js": "^9.39.1",
+    "eslint": "^9.39.1",
+    "jiti": "^2.6.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.47.0",
     "vitest": "^4.0.9"
   },
-  "description": "",
-  "keywords": [],
-  "license": "ISC",
-  "packageManager": "pnpm@10.16.1",
-  "scripts": {
-    "test": "vitest"
-  }
+  "packageManager": "pnpm@10.16.1"
 }

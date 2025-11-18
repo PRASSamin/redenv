@@ -31,7 +31,7 @@ export function loadMemoryConfig(): Credential[] {
     // handle empty file
     if (!raw) return [];
     return JSON.parse(raw);
-  } catch (err) {
+  } catch {
     // If file is corrupt or empty, treat as no memory
     return [];
   }

@@ -13,7 +13,6 @@ const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 16; // GCM standard
 const SALT_LENGTH = 64;
 const KEY_LENGTH = 32; // 256 bits
-const AUTH_TAG_LENGTH = 16;
 
 // Scrypt parameters - OWASP recommendations for interactive use
 const SCRYPT_OPTIONS = {
@@ -96,7 +95,7 @@ export function decrypt(encryptedString: string, key: Buffer): string {
     ]);
 
     return decrypted.toString("utf8");
-  } catch (error) {
+  } catch {
     // This catch block now only handles actual cryptographic errors,
     // such as an invalid authentication tag (which indicates a wrong key/password).
     throw new Error(

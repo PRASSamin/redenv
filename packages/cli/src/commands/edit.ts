@@ -28,7 +28,7 @@ export function editCommand(program: Command) {
       }
 
       const projectName =
-        sanitizeName(options.project) || projectConfig?.name!;
+        sanitizeName(options.project) || projectConfig?.name;
       let environment =
         sanitizeName(options.env) || projectConfig?.environment;
 

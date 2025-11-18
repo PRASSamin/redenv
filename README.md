@@ -30,10 +30,11 @@ Serverless and edge platforms have revolutionized deployment, but they have also
 
 Redenv is architected to solve these problems by re-imagining the relationship between an application and its configuration. It is built on four core principles:
 
-1.  **Centralized & Synchronized:** A single source of truth for all secrets, stored in a Redis database. This eliminates synchronization drift and insecure sharing practices.
-2.  **Secure by Default (Zero-Knowledge):** A robust end-to-end encryption model ensures that the database is considered "untrusted." Secrets are encrypted on the client and can only be decrypted on the client. The remote server has zero knowledge of the plaintext data.
-3.  **Dynamic & Decoupled:** Redenv is designed to be used with a runtime client (`@redenv/client`), allowing applications to fetch their configuration on startup. This completely decouples secret rotation from the deployment cycle, enabling instant updates.
-4.  **Developer-First Experience:** A powerful and intuitive CLI provides a complete suite of commands covering the entire secret management lifecycle, with UX-focused features like secure password caching.
+1.  **Centralized & Synchronized:** A single source of truth for all secrets, stored in a Redis database you control.
+2.  **Secure by Default (Zero-Knowledge):** A robust end-to-end encryption model ensures that the database is considered "untrusted." Your secrets are never stored in plaintext.
+3.  **Complete Version History:** Every change to a secret is recorded in an immutable history, providing a full audit trail and enabling instant rollbacks.
+4.  **Dynamic & Decoupled:** Redenv is designed to be used with a runtime client (`@redenv/client`), allowing applications to fetch their configuration on startup. This completely decouples secret rotation from the deployment cycle.
+5.  **Developer-First Experience:** A powerful and intuitive CLI provides a complete suite of commands covering the entire secret management lifecycle, with UX-focused features like secure password caching.
 
 ## 3. System Design & Technology Choices
 
@@ -52,7 +53,7 @@ Redenv's security is its most critical component.
 -   **Per-Project Encryption:** Each project is an isolated security domain protected by a unique **Project Encryption Key (PEK)**.
 -   **Master Password:** The PEK is "wrapped" (encrypted) by a key derived from a user-provided **Master Password**. This Master Password is known only to the user and is never stored or transmitted.
 -   **Key Derivation:** We use `scrypt`, a strong, industry-standard Key Derivation Function, to protect against brute-force attacks on the Master Password.
--   **Authenticated Encryption:** All data is encrypted using `AES-256-GCM`, which provides both confidentiality and integrity.
+-   **Authenticated Encryption:** All data, including all historical versions of secrets, is encrypted using `AES-256-GCM`, which provides both confidentiality and integrity.
 -   **Service Tokens:** For programmatic access, Redenv uses a secure token system. A token consists of a **Public ID** (a non-secret identifier) and a **Secret Key**. The Secret Key is used to decrypt the PEK for a specific project, allowing a server or CI/CD pipeline to securely fetch secrets without a password. This secret is displayed only once upon creation and must be stored securely by the user.
 
 ## 4. Features & Capabilities
@@ -62,6 +63,7 @@ Redenv provides a comprehensive suite of commands to manage secrets with confide
 -   **Core Commands:** `add`, `edit`, `view`, `list`, `remove`
 -   **Project Management:** `register`, `drop`, `switch`
 -   **Advanced Workflows:** `import`, `export`, `clone`, `diff`, `promote`
+-   **Auditing & History:** `history` (`view`, `limit`), `rollback`
 -   **Security & Safety:** `change-password`, `backup`, `restore`, `doctor`, `logout`
 -   **Application Access:** `token` (`create`, `list`, `revoke`)
 

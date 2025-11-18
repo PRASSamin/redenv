@@ -1,13 +1,37 @@
 {
   "name": "@redenv/cli",
-  "version": "1.0.0",
-  "module": "src/index.ts",
+  "version": "0.0.0",
+  "description": "A zero-knowledge CLI that replaces `.env` files with a secure, centralized, and version-controlled backend on Upstash Redis. Manage secrets dynamically without redeploying your application.",
+  "author": {
+    "name": "PRAS",
+    "email": "prassamin@gmail.com",
+    "url": "https://pras.me"
+  },
+  "license": "MIT",
+  "keywords": [
+    "cli",
+    "env",
+    "secrets",
+    "security",
+    "upstash",
+    "redis",
+    "dotenv"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PRASSamin/redenv.git"
+  },
   "type": "module",
+  "main": "dist/index.js",
   "bin": {
     "redenv": "dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc"
+    "dev": "tsx src/index.ts",
+    "build": "tsup"
   },
   "devDependencies": {
     "@types/commander": "^2.12.5",

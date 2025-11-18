@@ -4,9 +4,9 @@ import { loadProjectConfig } from "../core/config";
 import { redis } from "../core/upstash";
 import ora from "ora";
 import Table from "cli-table3";
-import { checkbox, select } from "@inquirer/prompts";
+import { select } from "@inquirer/prompts";
 import { safePrompt, sanitizeName } from "../utils";
-import { fetchEnvironments, fetchProjects } from "../utils/redis";
+import { fetchEnvironments } from "../utils/redis";
 import { unlockProject } from "../core/keys";
 import { decrypt } from "../core/crypto";
 
@@ -51,7 +51,7 @@ async function fetchAndDisplayVariables(
         const latestVersion = history[0];
         const decryptedValue = decrypt(latestVersion.value, decryptionKey);
         table.push([chalk.blue(key), chalk.green(decryptedValue)]);
-      } catch (e) {
+      } catch {
         table.push([
           chalk.blue(key),
           chalk.yellow(`[Corrupted or invalid data]`),

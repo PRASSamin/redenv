@@ -1,5 +1,4 @@
 import chalk from "chalk";
-import ora from "ora";
 import { exit } from "process";
 import { PROJECT_CONFIG_PATH, loadGlobalConfig } from "../core/config";
 import fs from "fs";
@@ -29,7 +28,7 @@ export function getAuditUser(): string {
     const userInfo = os.userInfo();
     const hostname = os.hostname();
     return `${userInfo.username}@${hostname}`;
-  } catch (e) {
+  } catch {
     // Failsafe in very restricted environments
     return "unknown-user";
   }

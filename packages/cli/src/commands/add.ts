@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import ora from "ora";
+import ora, { Ora } from "ora";
 import { Command } from "commander";
 import { loadProjectConfig } from "../core/config";
 import { sanitizeName, safePrompt } from "../utils";
@@ -28,7 +28,7 @@ export function addCommand(program: Command) {
       }
 
       const projectName =
-        sanitizeName(options.project) || projectConfig?.name!;
+        sanitizeName(options.project) || projectConfig?.name;
       let environment =
         sanitizeName(options.env) || projectConfig?.environment;
 
@@ -42,7 +42,7 @@ export function addCommand(program: Command) {
         );
       }
 
-      let spinner: ora.Ora | undefined;
+      let spinner: Ora | undefined;
       try {
         const pek = await unlockProject(projectName);
         spinner = ora(

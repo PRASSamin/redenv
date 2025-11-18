@@ -94,6 +94,12 @@ Redenv offers a full suite of commands for managing your secrets. For detailed o
 - `diff`
 - `promote`
 
+#### Auditing & History
+- `history`
+  - `history view [key]`
+  - `history limit [value]`
+- `rollback <key>`
+
 #### Security & Safety
 
 - `change-password`

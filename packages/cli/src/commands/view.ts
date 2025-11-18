@@ -75,7 +75,7 @@ export function viewCommand(program: Command) {
           }
           const latestVersion = history[0];
           decryptedValue = decrypt(latestVersion.value, pek);
-        } catch (e) {
+        } catch {
           console.log(
             chalk.yellow(
               `\n⚠️  Could not decrypt the value for '${key}'. It might be corrupted or the project key is incorrect.`

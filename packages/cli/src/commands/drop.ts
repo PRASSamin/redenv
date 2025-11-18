@@ -93,7 +93,7 @@ export function dropCommand(program: Command) {
     .command("project")
     .argument("[project]", "The project to drop")
     .description("Permanently delete a project and all of its environments")
-    .action(async (project, options) => {
+    .action(async (project) => {
       let projectToDrop = sanitizeName(project);
 
       if (!projectToDrop) {
