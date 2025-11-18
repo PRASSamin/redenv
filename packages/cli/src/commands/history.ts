@@ -3,13 +3,12 @@ import { Command } from "commander";
 import { loadProjectConfig } from "../core/config";
 import { safePrompt, sanitizeName } from "../utils";
 import { fetchEnvironments, fetchProjects } from "../utils/redis";
-import { select } from "@inquirer/prompts";
+import { select, input } from "@inquirer/prompts";
 import { unlockProject } from "../core/keys";
 import { decrypt } from "../core/crypto";
 import { redis } from "../core/upstash";
 import ora from "ora";
 import Table from "cli-table3";
-import { number } from "@inquirer/prompts";
 
 export function historyCommand(program: Command) {
   const historyCmd = program
@@ -85,19 +84,14 @@ export function historyCommand(program: Command) {
           spinner.start("Fetching history...");
         }
 
-        const historyJSON = await redis.hget(redisKey, targetKey);
+        const history = (await redis.hget(redisKey, targetKey)) as any[];
 
-        if (!historyJSON) {
+        if (!history) {
           spinner.fail(
             `No secret named "${targetKey}" found in ${environment}.`
           );
           return;
         }
-
-        const history =
-          typeof historyJSON === "string"
-            ? JSON.parse(historyJSON)
-            : historyJSON;
 
         if (!Array.isArray(history) || history.length === 0) {
           spinner.fail(`No history found for "${targetKey}".`);
@@ -113,24 +107,28 @@ export function historyCommand(program: Command) {
           colWidths: [10, 30, 25, 40],
         });
 
-        for (const version of history) {
+        const decryptionPromises = history.map(async (version) => {
           try {
-            const decryptedValue = decrypt(version.value, pek);
-            table.push([
+            const decryptedValue = await decrypt(version.value, pek);
+            return [
               version.version,
               new Date(version.createdAt).toLocaleString(),
               version.user,
               decryptedValue,
-            ]);
+            ];
           } catch {
-            table.push([
+            return [
               version.version,
               new Date(version.createdAt).toLocaleString(),
               version.user,
               chalk.yellow("[Could not decrypt]"),
-            ]);
+            ];
           }
-        }
+        });
+
+        const decryptedRows = await Promise.all(decryptionPromises);
+        decryptedRows.forEach((row) => table.push(row));
+
         console.log(table.toString());
       } catch (err) {
         if (spinner.isSpinning) spinner.fail(chalk.red((err as Error).message));
@@ -167,14 +165,12 @@ export function historyCommand(program: Command) {
         );
       }
 
-      let limit = value ? parseInt(value, 10) : null;
+      let limit: number | null = value ? parseInt(value, 10) : null;
 
       if (limit === null) {
-        limit = await safePrompt(() =>
-          number({
-            message: "Enter the new history limit:",
-            default: 10,
-            required: true,
+        const rawLimit = await safePrompt(() =>
+          input({
+            message: "Enter the new history limit. Use 0 for unlimited:",
             validate: (val) => {
               const num = Number(val);
               return (
@@ -184,6 +180,7 @@ export function historyCommand(program: Command) {
             },
           })
         );
+        limit = Number(rawLimit);
       }
 
       if (isNaN(limit) || limit < 0) {
@@ -203,9 +200,7 @@ export function historyCommand(program: Command) {
         const metaKey = `meta@${projectName}`;
         await redis.hset(metaKey, { historyLimit: limit });
         spinner.succeed(
-          chalk.green(
-            `History limit for "${projectName}" is now set to ${limit}.`
-          )
+          `History limit for "${projectName}" is now set to ${limit}.`
         );
       } catch (err) {
         if (spinner.isSpinning) spinner.fail(chalk.red((err as Error).message));

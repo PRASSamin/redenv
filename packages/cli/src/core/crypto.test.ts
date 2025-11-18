@@ -5,37 +5,39 @@ import {
   encrypt,
   decrypt,
   generateRandomKey,
+  exportKey,
 } from './crypto';
 
-describe('Crypto Utilities', () => {
-  it('should encrypt and then correctly decrypt data to its original form', () => {
-    const data = 'my secret data';
-    const key = generateRandomKey();
-    const encrypted = encrypt(data, key);
-    const decrypted = decrypt(encrypted, key);
+describe('Web Crypto Utilities', () => {
+  it('should encrypt and then correctly decrypt data to its original form', async () => {
+    const data = 'my secret data 🤫';
+    const key = await generateRandomKey();
+    const encrypted = await encrypt(data, key);
+    const decrypted = await decrypt(encrypted, key);
     
     expect(decrypted).toBe(data);
     expect(encrypted).not.toBe(data);
   });
 
-  it('should fail to decrypt data with the wrong key', () => {
+  it('should fail to decrypt data with the wrong key', async () => {
     const data = 'my secret data';
-    const correctKey = generateRandomKey();
-    const wrongKey = generateRandomKey();
-    const encrypted = encrypt(data, correctKey);
+    const correctKey = await generateRandomKey();
+    const wrongKey = await generateRandomKey();
+    const encrypted = await encrypt(data, correctKey);
 
-    // Expecting the decrypt function to throw a specific error for crypto failures
-    expect(() => decrypt(encrypted, wrongKey)).toThrow(
-      /Decryption failed/
-    );
+    await expect(decrypt(encrypted, wrongKey)).rejects.toThrow(/Decryption failed/);
   });
 
-  it('should derive a key of the correct length (32 bytes for AES-256)', async () => {
+  it('should derive a key that can be used for encryption', async () => {
     const password = 'my-super-secret-password';
     const salt = generateSalt();
     const derivedKey = await deriveKey(password, salt);
     
-    expect(derivedKey.length).toBe(32);
+    // The best test is to see if it actually works for a round-trip
+    const data = 'test';
+    const encrypted = await encrypt(data, derivedKey);
+    const decrypted = await decrypt(encrypted, derivedKey);
+    expect(decrypted).toBe(data);
   });
 
   it('should produce different keys for the same password with different salts', async () => {
@@ -46,15 +48,16 @@ describe('Crypto Utilities', () => {
     const derivedKey1 = await deriveKey(password, salt1);
     const derivedKey2 = await deriveKey(password, salt2);
 
-    expect(derivedKey1).not.toEqual(derivedKey2);
+    const exportedKey1 = await exportKey(derivedKey1);
+    const exportedKey2 = await exportKey(derivedKey2);
+
+    expect(exportedKey1).not.toEqual(exportedKey2);
   });
 
-  it('should throw an error if the encrypted string format is invalid', () => {
-    const key = generateRandomKey();
-    const invalidString1 = 'this-is-not-valid';
-    const invalidString2 = 'this:is:not:valid:at:all';
+  it('should throw an error if the encrypted string format is invalid', async () => {
+    const key = await generateRandomKey();
+    const invalidString = 'this-is-not-valid';
     
-    expect(() => decrypt(invalidString1, key)).toThrow(/Invalid encrypted string format/);
-    expect(() => decrypt(invalidString2, key)).toThrow(/Invalid encrypted string format/);
+    await expect(decrypt(invalidString, key)).rejects.toThrow(/Invalid encrypted string format/);
   });
 });

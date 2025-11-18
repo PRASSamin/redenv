@@ -53,7 +53,8 @@ export function exportCommand(program: Command) {
       const pek = await unlockProject(projectName);
 
       const redisKey = `${environment}:${projectName}`;
-      const spinner = ora(`Fetching variables from ${projectName} (${environment})...`).start();
+      const spinner = ora(`Fetching variables from ${projectName} (${environment})...
+`).start();
       let versionedVars: Record<string, any> = {};
       try {
         versionedVars = (await redis.hgetall(redisKey)) || {};
@@ -103,16 +104,21 @@ export function exportCommand(program: Command) {
       }
 
       const conflicts = selectedKeys.filter((key) => Object.prototype.hasOwnProperty.call(existingVars, key));
-      const diffValues = conflicts.filter((key) => {
+      
+      const diffPromises = conflicts.map(async (key) => {
         try {
           const history = versionedVars[key];
-          if (!Array.isArray(history) || history.length === 0) return true;
-          const decryptedValue = decrypt(history[0].value, pek);
-          return normalize(existingVars[key]) !== normalize(decryptedValue);
+          if (!Array.isArray(history) || history.length === 0) return { key, isDiff: true };
+          const decryptedValue = await decrypt(history[0].value, pek);
+          const isDiff = normalize(existingVars[key]) !== normalize(decryptedValue);
+          return { key, isDiff };
         } catch {
-          return true; // Treat un-decryptable values as different
+          return { key, isDiff: true }; // Treat un-decryptable values as different
         }
       });
+
+      const diffResults = await Promise.all(diffPromises);
+      const diffValues = diffResults.filter(r => r.isDiff).map(r => r.key);
 
       let override = false;
       if (diffValues.length > 0) {
@@ -159,16 +165,19 @@ export function exportCommand(program: Command) {
       if (keysToWrite.length > 0) {
         contentToAppend += finalContent.endsWith("\n\n") || finalContent.length === 0 ? "" : "\n";
         contentToAppend += `\n# Variables exported by redenv from ${projectName} (${environment}) at ${new Date().toISOString()}\n`;
-        keysToWrite.forEach((key) => {
+        
+        const decryptionPromises = keysToWrite.map(async (key) => {
           try {
             const history = versionedVars[key];
             if (!Array.isArray(history) || history.length === 0) throw new Error();
-            const decryptedValue = decrypt(history[0].value, pek);
-            contentToAppend += `${key}="${decryptedValue}"\n`;
+            const decryptedValue = await decrypt(history[0].value, pek);
+            return `${key}="${decryptedValue}"\n`;
           } catch {
-            contentToAppend += `# ${key}="[redenv: could not decrypt value]"\n`;
+            return `# ${key}="[redenv: could not decrypt value]"\n`;
           }
         });
+        const linesToAppend = await Promise.all(decryptionPromises);
+        contentToAppend += linesToAppend.join('');
       }
 
       finalContent += contentToAppend;

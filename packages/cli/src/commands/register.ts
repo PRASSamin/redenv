@@ -10,6 +10,7 @@ import {
   encrypt,
   generateRandomKey,
   generateSalt,
+  exportKey,
 } from "../core/crypto";
 import { redis } from "../core/upstash";
 import { unlockProject } from "../core/keys";
@@ -20,7 +21,11 @@ export function registerCommand(program: Command) {
     .argument("<project>", "Project name")
     .argument("[env]", "Project environment", "development")
     .argument("[prodEnv]", "Production environment", "production")
-    .option("-l, --history-limit <number>", "Number of history entries to keep per secret", "10")
+    .option(
+      "-l, --history-limit <number>",
+      "Number of history entries to keep per secret",
+      "10"
+    )
     .description("Register a new project or connect to an existing one")
     .action(async (project, env, prodEnv, options) => {
       const sanitizedProject = sanitizeName(project);
@@ -78,7 +83,7 @@ export function registerCommand(program: Command) {
 
       // --- Flow for creating a NEW project ---
       console.log(
-        chalk.blue(`Creating new encrypted project "${sanitizedProject}"...`)
+        chalk.blue(`Creating new project "${sanitizedProject}"...`)
       );
       const masterPassword = await safePrompt(() =>
         password({
@@ -100,23 +105,22 @@ export function registerCommand(program: Command) {
       spinner.start("Encrypting and registering project...");
       try {
         const salt = generateSalt();
-        const projectEncryptionKey = generateRandomKey();
+        const projectEncryptionKey = await generateRandomKey();
         const passwordDerivedKey = await deriveKey(masterPassword, salt);
-        const encryptedPEK = encrypt(
-          projectEncryptionKey.toString("hex"),
-          passwordDerivedKey
-        );
+
+        const exportedPEK = await exportKey(projectEncryptionKey);
+        const encryptedPEK = await encrypt(exportedPEK, passwordDerivedKey);
 
         const historyLimit = parseInt(options.historyLimit, 10);
         if (isNaN(historyLimit) || historyLimit < 0) {
-            throw new Error("History limit must be a non-negative number.");
+          throw new Error("History limit must be a non-negative number.");
         }
 
         const metadata = {
           encryptedPEK: encryptedPEK,
-          salt: salt.toString("hex"),
+          salt: Buffer.from(salt).toString("hex"),
           historyLimit: historyLimit,
-          kdf: "scrypt",
+          kdf: "pbkdf2",
           algorithm: "aes-256-gcm",
           createdAt: new Date().toISOString(),
         };

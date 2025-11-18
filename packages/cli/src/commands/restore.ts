@@ -39,8 +39,8 @@ export function restoreCommand(program: Command) {
 
         const salt = Buffer.from(backupFile.salt, "hex");
         const backupKey = await deriveKey(backupPassword, salt);
-        const decryptedData = decrypt(backupFile.encryptedData, backupKey);
-        const dataToRestore: Record<string, Record<string, string>> =
+        const decryptedData = await decrypt(backupFile.encryptedData, backupKey);
+        const dataToRestore: Record<string, Record<string, any>> =
           JSON.parse(decryptedData);
         
         spinner.succeed("Backup file decrypted successfully.");
@@ -105,21 +105,25 @@ export function restoreCommand(program: Command) {
         const restoreSpinner = ora("Restoring data to Redis...").start();
         const pipeline = redis.pipeline();
         for (const key of keysToRestore) {
-          // Delete the key first to ensure a clean restore
           pipeline.del(key);
-          // HSET the new data
-          pipeline.hset(key, dataToRestore[key]);
+          // The values in the backup are already objects/arrays, but hset needs strings.
+          // We must stringify them before restoring.
+          const stringifiedValues: Record<string, string> = {};
+          for (const field in dataToRestore[key]) {
+            stringifiedValues[field] = JSON.stringify(dataToRestore[key][field]);
+          }
+          pipeline.hset(key, stringifiedValues);
         }
         await pipeline.exec();
 
         restoreSpinner.succeed(
-          chalk.green(`Successfully restored data for ${keysToRestore.length} keys.`)
+          `Successfully restored data for ${keysToRestore.length} keys.`
         );
 
       } catch (err) {
         if (spinner.isSpinning) {
           spinner.fail(chalk.red((err as Error).message));
-        } else {
+        } else if ((err as Error).name !== 'ExitPromptError') {
           console.log(chalk.red(`\n✘ An unexpected error occurred: ${(err as Error).message}`));
         }
         process.exit(1);

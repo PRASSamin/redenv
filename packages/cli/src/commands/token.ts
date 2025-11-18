@@ -5,7 +5,7 @@ import { safePrompt, sanitizeName } from "../utils";
 import { fetchProjects } from "../utils/redis";
 import { select, input, checkbox, confirm } from "@inquirer/prompts";
 import { unlockProject } from "../core/keys";
-import { deriveKey, encrypt, generateSalt } from "../core/crypto";
+import { deriveKey, encrypt, generateSalt, exportKey } from "../core/crypto";
 import { redis } from "../core/upstash";
 import ora from "ora";
 import { randomBytes } from "crypto";
@@ -14,6 +14,16 @@ import Table from "cli-table3";
 // Generates a random, URL-safe string
 const generateRandomString = (length: number) => {
   return randomBytes(length).toString("base64url").slice(0, length);
+};
+
+// Helper to safely parse the serviceTokens field
+const parseServiceTokens = (metadata: Record<string, any> | null) => {
+  if (!metadata || !metadata.serviceTokens) {
+    return {};
+  }
+  return typeof metadata.serviceTokens === "string"
+    ? JSON.parse(metadata.serviceTokens)
+    : metadata.serviceTokens;
 };
 
 export function tokenCommand(program: Command) {
@@ -64,7 +74,7 @@ export function tokenCommand(program: Command) {
           })
         ));
 
-      let spinner;
+      let spinner: ora.Ora | undefined;
       try {
         const pek = await unlockProject(projectName);
         spinner = ora("Generating and saving token...").start();
@@ -74,7 +84,8 @@ export function tokenCommand(program: Command) {
         const tokenSalt = generateSalt();
 
         const tokenKey = await deriveKey(secretToken, tokenSalt);
-        const encryptedPEK = encrypt(pek.toString("hex"), tokenKey);
+        const exportedPEK = await exportKey(pek);
+        const encryptedPEK = await encrypt(exportedPEK, tokenKey);
 
         const metaKey = `meta@${projectName}`;
         const metadata = await redis.hgetall<Record<string, any>>(metaKey);
@@ -82,11 +93,11 @@ export function tokenCommand(program: Command) {
           throw new Error("Failed to retrieve project metadata.");
         }
 
-        const serviceTokens = metadata.serviceTokens ?? {};
+        const serviceTokens = parseServiceTokens(metadata);
 
         serviceTokens[publicTokenId] = {
           encryptedPEK,
-          salt: tokenSalt.toString("hex"),
+          salt: Buffer.from(tokenSalt).toString("hex"),
           name,
           description,
           createdAt: new Date().toISOString(),
@@ -99,21 +110,15 @@ export function tokenCommand(program: Command) {
         spinner.succeed("Service Token created successfully.");
 
         console.log(
-          chalk.yellow(
-            "\n┌───────────────────────────────────────────────────────────────────┐"
-          )
+          chalk.yellow("\n┌───────────────────────────────────────────────────────────┐")
         );
         console.log(
           chalk.yellow("│ ") +
-            chalk.bold.red("IMPORTANT:") +
-            " The Secret Token Key is shown " +
-            chalk.bold("ONCE") +
-            ". Store it securely. │"
+            chalk.bold.red("IMPORTANT:") + " The Secret Token Key is shown " +
+            chalk.bold("ONCE") + ". Store it securely. │"
         );
         console.log(
-          chalk.yellow(
-            "└───────────────────────────────────────────────────────────────────┘\n"
-          )
+          chalk.yellow("└───────────────────────────────────────────────────────────┘\n")
         );
         console.log(
           chalk.cyan("  Your application will need these three values:\n")
@@ -124,8 +129,10 @@ export function tokenCommand(program: Command) {
           `    ${chalk.bold("Secret Token Key:")}  ${chalk.green(secretToken)}`
         );
         console.log(
-          `\n  ${chalk.gray(`Set these in your application's environment.`)}`
-        );
+          `\n  ${chalk.gray(
+            `Set these in your application's environment as REDENV_PROJECT, REDENV_TOKEN_ID, and REDENV_TOKEN_SECRET.`
+          )}
+        `);
       } catch (err) {
         const error = err as Error;
         if (spinner && spinner.isSpinning) {
@@ -165,12 +172,8 @@ export function tokenCommand(program: Command) {
       try {
         const metaKey = `meta@${projectName}`;
         const metadata = await redis.hgetall<Record<string, any>>(metaKey);
-        if (!metadata || !metadata.serviceTokens) {
-          spinner.info(`No Service Tokens found for project "${projectName}".`);
-          return;
-        }
-
-        const serviceTokens = metadata.serviceTokens;
+        
+        const serviceTokens = parseServiceTokens(metadata);
         const tokenIds = Object.keys(serviceTokens);
 
         if (tokenIds.length === 0) {
@@ -229,12 +232,8 @@ export function tokenCommand(program: Command) {
       try {
         const metaKey = `meta@${projectName}`;
         const metadata = await redis.hgetall<Record<string, any>>(metaKey);
-        if (!metadata || !metadata.serviceTokens) {
-          spinner.fail(`No Service Tokens found for project "${projectName}".`);
-          return;
-        }
-
-        const serviceTokens = metadata.serviceTokens;
+        
+        const serviceTokens = parseServiceTokens(metadata);
         let tokenIdsToRevoke: string[] = tokenIds;
 
         if (tokenIdsToRevoke.length === 0) {
@@ -266,7 +265,9 @@ export function tokenCommand(program: Command) {
         spinner.stop();
         const confirmation = await safePrompt(() =>
           confirm({
-            message: `Are you sure you want to revoke ${tokenIdsToRevoke.length} token(s)? Any application using them will immediately lose access.`,
+            message: `Are you sure you want to revoke ${ 
+              tokenIdsToRevoke.length 
+            } token(s)? Any application using them will immediately lose access.`, 
             default: false,
           })
         );
@@ -277,23 +278,23 @@ export function tokenCommand(program: Command) {
         }
 
         spinner.start("Revoking token(s)...");
-        tokenIdsToRevoke.forEach((id) => delete serviceTokens[id]);
+        tokenIdsToRevoke.forEach((id) => {
+            if (serviceTokens[id]) {
+                delete serviceTokens[id]
+            }
+        });
         await redis.hset(metaKey, {
           serviceTokens: JSON.stringify(serviceTokens),
         });
 
         spinner.succeed(
-          chalk.green(
-            `Successfully revoked ${tokenIdsToRevoke.length} token(s).`
-          )
+          `Successfully revoked ${tokenIdsToRevoke.length} token(s).`
         );
       } catch (err) {
         if (spinner.isSpinning) spinner.fail(chalk.red((err as Error).message));
         else if ((err as Error).name !== "ExitPromptError") {
           console.log(
-            chalk.red(
-              `\n✘ An unexpected error occurred: ${(err as Error).message}`
-            )
+            chalk.red(`\n✘ An unexpected error occurred: ${(err as Error).message}`)
           );
         }
         process.exit(1);

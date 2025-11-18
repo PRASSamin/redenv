@@ -3,7 +3,8 @@ import { redis } from "../core/upstash";
 import chalk from "chalk";
 import { exit } from "process";
 import { getAuditUser } from "./index";
-import { encrypt } from "../core/crypto";
+import { type CryptoKey, encrypt } from "../core/crypto";
+import { EnvironmentVariableValue } from "../types";
 
 export async function scanAll(match: string, count = 100): Promise<string[]> {
   let cursor = 0;
@@ -72,7 +73,7 @@ export async function writeSecret(
   environment: string,
   key: string,
   newValue: string,
-  pek: Buffer,
+  pek: CryptoKey,
   options: { isNew: boolean }
 ) {
   const redisKey = `${environment}:${projectName}`;
@@ -80,25 +81,29 @@ export async function writeSecret(
   const exists = (await redis.hexists(redisKey, key)) > 0;
 
   if (options.isNew && exists) {
-    throw new Error(`Key '${key}' already exists. Use 'redenv edit' to update it.`);
+    throw new Error(
+      `Key '${key}' already exists. Use 'redenv edit' to update it.`
+    );
   }
   if (!options.isNew && !exists) {
-    throw new Error(`Key '${key}' does not exist. Use 'redenv add' to create it.`);
+    throw new Error(
+      `Key '${key}' does not exist. Use 'redenv add' to create it.`
+    );
   }
 
   const metaKey = `meta@${projectName}`;
-  const [metadata, currentHistoryJSON] = await Promise.all([
+  const [metadata, currentHistory] = await Promise.all([
     redis.hgetall<{ historyLimit?: number }>(metaKey),
-    redis.hget(redisKey, key) as Promise<string | null>,
+    redis.hget(redisKey, key) as Promise<EnvironmentVariableValue | null>,
   ]);
 
-  const history = currentHistoryJSON ? JSON.parse(currentHistoryJSON) : [];
+  const history = Array.isArray(currentHistory) ? currentHistory : [];
   const lastVersion = history[0]?.version || 0;
   const user = getAuditUser();
 
   const newVersion = {
     version: lastVersion + 1,
-    value: encrypt(newValue, pek),
+    value: await encrypt(newValue, pek),
     user: user,
     createdAt: new Date().toISOString(),
   };

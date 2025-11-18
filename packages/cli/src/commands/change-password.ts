@@ -5,9 +5,9 @@ import { safePrompt, sanitizeName } from "../utils";
 import { fetchProjects } from "../utils/redis";
 import { select, password } from "@inquirer/prompts";
 import { forgetProjectKey } from "../core/keys";
-import { deriveKey, encrypt, decrypt } from "../core/crypto";
+import { deriveKey, encrypt, decrypt, importKey, exportKey } from "../core/crypto";
 import { redis } from "../core/upstash";
-import ora from "ora";
+import ora, { Ora } from "ora";
 
 export function changePasswordCommand(program: Command) {
   program
@@ -31,7 +31,7 @@ export function changePasswordCommand(program: Command) {
         );
       }
 
-      let spinner;
+      let spinner: Ora | undefined;
       try {
         console.log(
           chalk.blue(`Changing Master Password for project "${projectName}".`)
@@ -57,11 +57,8 @@ export function changePasswordCommand(program: Command) {
 
         const salt = Buffer.from(metadata.salt, "hex");
         const passwordDerivedKey = await deriveKey(currentMasterPassword, salt);
-        const decryptedPEKHex = decrypt(
-          metadata.encryptedPEK,
-          passwordDerivedKey
-        );
-        const pek = Buffer.from(decryptedPEKHex, "hex");
+        const decryptedPEKHex = await decrypt(metadata.encryptedPEK, passwordDerivedKey);
+        const pek = await importKey(decryptedPEKHex);
         spinner.succeed("Current password verified.");
 
         const newMasterPassword = await safePrompt(() =>
@@ -85,18 +82,14 @@ export function changePasswordCommand(program: Command) {
         spinner.start();
 
         const newPasswordDerivedKey = await deriveKey(newMasterPassword, salt);
-        const newEncryptedPEK = encrypt(
-          pek.toString("hex"),
-          newPasswordDerivedKey
-        );
+        const exportedPEK = await exportKey(pek);
+        const newEncryptedPEK = await encrypt(exportedPEK, newPasswordDerivedKey);
 
         await redis.hset(metaKey, { encryptedPEK: newEncryptedPEK });
         await forgetProjectKey(projectName);
 
         spinner.succeed(
-          chalk.green(
-            `Successfully changed Master Password for project "${projectName}".`
-          )
+          `Successfully changed Master Password for project "${projectName}".`
         );
         console.log(
           chalk.yellow(
@@ -112,7 +105,6 @@ export function changePasswordCommand(program: Command) {
             chalk.red(`\n✘ An unexpected error occurred: ${error.message}`)
           );
         }
-        // Explicitly exit with a failure code to ensure the spinner process is killed.
         process.exit(1);
       }
     });

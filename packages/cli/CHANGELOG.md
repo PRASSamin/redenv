@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2025-11-18
+
+### Changed
+- **BREAKING:** The core crypto engine has been completely refactored from the Node.js-specific `crypto` module (using `scrypt`) to the universal **Web Crypto API** (using `PBKDF2`). This makes the entire system compatible with all modern JavaScript runtimes, including serverless and edge environments.
+- All commands have been updated to work with the new asynchronous cryptographic functions.
+
+### Fixed
+- Resolved a critical TypeScript type conflict between Node.js's `webcrypto.CryptoKey` and the global `CryptoKey` type, ensuring type safety across the project.
+
+---
+
 ## [1.0.0] - 2025-11-18
 
 This is the initial public release of the Redenv CLI, a secure, feature-rich, and user-friendly tool for modern secret management.

@@ -68,21 +68,21 @@ export function viewCommand(program: Command) {
           chalk.greenBright(`Found key in ${projectName} (${environment})`)
         );
 
-        let decryptedValue;
+        let decryptedValue: string;
         try {
           if (!Array.isArray(history) || history.length === 0) {
-            throw new Error("History format is invalid.");
+            throw new Error("History format is invalid or empty.");
           }
           const latestVersion = history[0];
-          decryptedValue = decrypt(latestVersion.value, pek);
-        } catch {
+          decryptedValue = await decrypt(latestVersion.value, pek);
+        } catch (e) {
           console.log(
             chalk.yellow(
               `\n⚠️  Could not decrypt the value for '${key}'. It might be corrupted or the project key is incorrect.`
             )
           );
           // In case of error, show the raw JSON for debugging
-          decryptedValue = history;
+          decryptedValue = JSON.stringify(history, null, 2);
         }
 
         const table = new Table({
@@ -95,11 +95,11 @@ export function viewCommand(program: Command) {
         console.log(table.toString());
       } catch (err) {
         // Errors from unlockProject are handled within the function, so this will catch other errors.
-        console.log(
-          chalk.red(
-            `\n✘ An unexpected error occurred: ${(err as Error).message}`
-          )
-        );
+        if ((err as Error).name !== 'ExitPromptError') {
+            console.log(
+              chalk.red(`\n✘ An unexpected error occurred: ${(err as Error).message}`)
+            );
+        }
       }
     });
 }

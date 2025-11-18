@@ -1,0 +1,11 @@
+{
+  "name": "@redenv/client",
+  "module": "src/index.ts",
+  "type": "module",
+  "devDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.35.6"
+  }
+}

@@ -11,7 +11,9 @@ export function logoutCommand(program: Command) {
     .argument("[projects...]")
     .description("Remove remembered project password(s) from the OS keychain")
     .action(async (projects: string[]) => {
-      let projectsToLogOut: string[] = projects.map(sanitizeName);
+      let projectsToLogOut: string[] = projects
+        .map((p) => sanitizeName(p) ?? null)
+        .filter((p) => p !== null);
 
       if (projectsToLogOut.length === 0) {
         const availableProjects = await fetchProjects();
@@ -41,9 +43,7 @@ export function logoutCommand(program: Command) {
         try {
           const success = await forgetProjectKey(project);
           if (success) {
-            console.log(
-              chalk.green(`✔ Logged out from project "${project}".`)
-            );
+            console.log(chalk.green(`✔ Logged out from project "${project}".`));
             successCount++;
           } else {
             notFoundCount++;
@@ -51,7 +51,9 @@ export function logoutCommand(program: Command) {
         } catch (err) {
           console.log(
             chalk.red(
-              `✘ Failed to log out from project "${project}": ${ (err as Error).message}`
+              `✘ Failed to log out from project "${project}": ${
+                (err as Error).message
+              }`
             )
           );
         }

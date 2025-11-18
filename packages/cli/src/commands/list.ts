@@ -8,11 +8,11 @@ import { select } from "@inquirer/prompts";
 import { safePrompt, sanitizeName } from "../utils";
 import { fetchEnvironments } from "../utils/redis";
 import { unlockProject } from "../core/keys";
-import { decrypt } from "../core/crypto";
+import { type CryptoKey, decrypt } from "../core/crypto";
 
 async function fetchAndDisplayVariables(
   redisKey: string,
-  decryptionKey: Buffer
+  decryptionKey: CryptoKey
 ) {
   const [environment, projectName] = redisKey.split(":");
   const spinner = ora(
@@ -43,20 +43,25 @@ async function fetchAndDisplayVariables(
     });
 
     const sorted = Object.entries(envs).sort(([a], [b]) => a.localeCompare(b));
-    for (const [key, history] of sorted) {
+    
+    // Decrypt all values in parallel for performance
+    const decryptionPromises = sorted.map(async ([key, history]) => {
       try {
         if (!Array.isArray(history) || history.length === 0) {
           throw new Error("Invalid history format");
         }
         const latestVersion = history[0];
-        const decryptedValue = decrypt(latestVersion.value, decryptionKey);
-        table.push([chalk.blue(key), chalk.green(decryptedValue)]);
-      } catch {
-        table.push([
-          chalk.blue(key),
-          chalk.yellow(`[Corrupted or invalid data]`),
-        ]);
+        const decryptedValue = await decrypt(latestVersion.value, decryptionKey);
+        return [key, decryptedValue];
+      } catch (e) {
+        return [key, chalk.yellow(`[Corrupted or invalid data]`)];
       }
+    });
+
+    const decryptedRows = await Promise.all(decryptionPromises);
+
+    for (const [key, decryptedValue] of decryptedRows) {
+        table.push([chalk.blue(key as string), chalk.green(decryptedValue as string)]);
     }
 
     console.log(table.toString());
@@ -72,7 +77,7 @@ export function listCommand(program: Command) {
     .command("list")
     .description("List all ENV variables for a project")
     .option("-p, --project <name>", "Specify project name")
-    .option("-e, --env <env>", "Specify environment")
+    .option("-e, --env <env>", "Specify the environment")
     .action(async (options) => {
       const projectConfig = loadProjectConfig();
       const projectOption = sanitizeName(options.project);

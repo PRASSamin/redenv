@@ -24,7 +24,7 @@ export function cloneCommand(program: Command) {
       from = sanitizeName(from);
       to = sanitizeName(to);
 
-      const config = options.project ? null : loadProjectConfig();
+      let config = options.project ? null : loadProjectConfig();
       project = project || config?.name;
 
       if (!project) {
@@ -89,7 +89,7 @@ export function cloneCommand(program: Command) {
       try {
         sourceVars = (await redis.hgetall(sourceKey)) || {};
         destVars = (await redis.hgetall(destKey)) || {};
-        spinner.stop();
+        spinner.succeed("Variables loaded.");
       } catch (err) {
         spinner.fail(chalk.red(`Failed: ${(err as Error).message}`));
         return;
@@ -100,7 +100,7 @@ export function cloneCommand(program: Command) {
         return;
       }
 
-      const missingKeys = Object.keys(sourceVars).filter((k) => !(k in destVars));
+      let missingKeys = Object.keys(sourceVars).filter((k) => !(k in destVars));
       if (missingKeys.length === 0) {
         console.log(chalk.green(`✔ Everything is already synced! No new keys to clone from ${from} → ${to}.`));
         return;
@@ -133,16 +133,18 @@ export function cloneCommand(program: Command) {
       }
 
       console.log(chalk.cyan("\nKeys to clone:"));
-      for (const k of selectedKeys) {
+      const displayPromises = selectedKeys.map(async (k) => {
         try {
           const history = sourceVars[k];
           if (!Array.isArray(history) || history.length === 0) throw new Error();
-          const latestValue = decrypt(history[0].value, pek);
-          console.log(`  • ${k}=${latestValue}`);
+          const latestValue = await decrypt(history[0].value, pek);
+          return `  • ${k}=${latestValue}`;
         } catch {
-          console.log(`  • ${k}=[could not display value]`);
+          return `  • ${k}=[could not display value]`;
         }
-      }
+      });
+      const displayLines = await Promise.all(displayPromises);
+      console.log(displayLines.join("\n"));
 
       const confirm = await safePrompt(() => select({ message: "Proceed?", choices: [{name: "Yes", value: "yes"}, {name: "No", value: "no"}] }));
       if (confirm === "no") {
@@ -157,7 +159,7 @@ export function cloneCommand(program: Command) {
             dataToStore[key] = JSON.stringify(newData[key]);
         }
         await redis.hset(destKey, dataToStore);
-        apply.succeed(chalk.green(`Successfully cloned ${selectedKeys.length} key(s) from ${from} → ${to}!`));
+        apply.succeed(`Successfully cloned ${selectedKeys.length} key(s) from ${from} → ${to}!`);
       } catch (err) {
         apply.fail(chalk.red(`Failed: ${(err as Error).message}`));
       }

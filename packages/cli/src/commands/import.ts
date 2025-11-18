@@ -34,10 +34,7 @@ export function importCommand(program: Command) {
         projectName = await safePrompt(() =>
           select({
             message: "Select project:",
-            choices: [
-              ...projects.map((p) => ({ name: p, value: p })),
-              { name: "New Project", value: "New Project" },
-            ],
+            choices: [...projects.map((p) => ({ name: p, value: p })), { name: "New Project", value: "New Project" }],
           })
         );
         if (projectName === "New Project") {
@@ -56,10 +53,7 @@ export function importCommand(program: Command) {
         environment = await safePrompt(() =>
           select({
             message: "Select environment:",
-            choices: [
-              ...envs.map((e) => ({ name: e, value: e })),
-              { name: "New environment", value: "New environment" },
-            ],
+            choices: [...envs.map((e) => ({ name: e, value: e })), { name: "New environment", value: "New environment" }],
           })
         );
         if (environment === "New environment") {
@@ -81,8 +75,8 @@ export function importCommand(program: Command) {
         const fileContent = fs.readFileSync(filePath, "utf8");
         parsed = dotenv.parse(fileContent);
         spinner.succeed(chalk.green("Parsed .env file"));
-      } catch {
-        spinner.fail(chalk.red("Failed to parse .env file"));
+      } catch (err) {
+        spinner.fail(chalk.red(`Failed to parse .env file: ${(err as Error).message}`));
         return;
       }
 
@@ -92,8 +86,8 @@ export function importCommand(program: Command) {
       try {
         existing = (await redis.hgetall(redisKey)) || {};
         spinner.succeed(chalk.green("Loaded existing vars"));
-      } catch {
-        spinner.fail(chalk.red("Failed to load existing environment"));
+      } catch (err) {
+        spinner.fail(chalk.red(`Failed to load existing environment: ${(err as Error).message}`));
         return;
       }
 
@@ -103,14 +97,11 @@ export function importCommand(program: Command) {
       const newKeys = keysInFile.filter((k) => !keysInRedis.includes(k));
 
       const keysToImport: string[] = [];
-
+      
       console.log("");
       if (conflictingKeys.length > 0) {
-        console.log(
-          chalk.yellow(
-            `⚠ The following keys already exist in ${environment}:${projectName}:\n`
-          )
-        );
+        console.log(chalk.yellow(`⚠ The following keys already exist in ${environment}:${projectName}:
+`));
         const keysWithDiff: string[] = [];
 
         for (const k of conflictingKeys) {
@@ -118,27 +109,20 @@ export function importCommand(program: Command) {
           let existingValue = "";
           try {
             const history = existing[k];
-            if (!Array.isArray(history) || history.length === 0)
-              throw new Error();
-            existingValue = normalize(decrypt(history[0].value, pek));
+            if (!Array.isArray(history) || history.length === 0) throw new Error();
+            existingValue = normalize(await decrypt(history[0].value, pek));
           } catch {
             existingValue = `[un-decryptable or invalid format]`;
           }
 
           if (existingValue !== newValue) {
             keysWithDiff.push(k);
-            console.log(
-              chalk.yellow(
-                `~ ${k}   current="${existingValue}" | new="${newValue}"`
-              )
-            );
+            console.log(chalk.yellow(`~ ${k}   current="${existingValue}" | new="${newValue}"`));
           }
         }
 
         if (keysWithDiff.length > 0) {
-          const override = await safePrompt(() =>
-            confirm({ message: "Do you want to override these existing keys?" })
-          );
+          const override = await safePrompt(() => confirm({ message: "Do you want to override these existing keys?" }));
           if (override) keysToImport.push(...keysWithDiff);
         }
       }
@@ -146,24 +130,16 @@ export function importCommand(program: Command) {
       keysToImport.push(...newKeys);
 
       if (keysToImport.length === 0) {
-        console.log(
-          chalk.green("✔ Nothing to import. All keys are in sync or skipped.")
-        );
+        console.log(chalk.green("✔ Nothing to import. All keys are in sync or skipped."));
         return;
       }
 
       console.log("");
       console.log(chalk.cyan("Keys to import:"));
-      keysToImport.forEach((k) =>
-        console.log(chalk.green(`+ ${k}="${parsed[k]}"`))
-      );
+      keysToImport.forEach((k) => console.log(chalk.green(`+ ${k}="${parsed[k]}"`)));
 
       console.log("");
-      const confirmImport = await safePrompt(() =>
-        confirm({
-          message: `Import ${keysToImport.length} variable(s) into ${environment}:${projectName}?`,
-        })
-      );
+      const confirmImport = await safePrompt(() => confirm({ message: `Import ${keysToImport.length} variable(s) into ${environment}:${projectName}?` }));
 
       if (!confirmImport) {
         console.log(chalk.red("✘ Import cancelled."));
@@ -173,18 +149,12 @@ export function importCommand(program: Command) {
       spinner.start("Encrypting and importing variables...");
       try {
         for (const key of keysToImport) {
-          const isNew = !keysInRedis.includes(key);
-          await writeSecret(projectName, environment, key, parsed[key], pek, {
-            isNew,
-          });
+            const isNew = !keysInRedis.includes(key);
+            await writeSecret(projectName, environment, key, parsed[key], pek, { isNew });
         }
-        spinner.succeed(
-          chalk.green(`Imported ${keysToImport.length} variable(s).`)
-        );
+        spinner.succeed(chalk.green(`Imported ${keysToImport.length} variable(s).`));
       } catch (err) {
-        spinner.fail(
-          chalk.red(`Failed to import variables: ${(err as Error).message}`)
-        );
+        spinner.fail(chalk.red(`Failed to import variables: ${(err as Error).message}`));
       }
 
       console.log("");

@@ -15,7 +15,7 @@ export function promoteCommand(program: Command) {
   program
     .command("promote")
     .description(
-      "Promote new variables from dev to prod (sync without overwriting existing prod keys)"
+      "Promote new or changed variables from a source environment to a destination"
     )
     .action(async () => {
       const projectConfig = loadProjectConfig();
@@ -65,41 +65,68 @@ export function promoteCommand(program: Command) {
 
         if (!devVars || Object.keys(devVars).length === 0) {
           console.log(
-            chalk.yellow(`No variables found in ${environment} environment.`)
+            chalk.yellow(`No variables found in source environment "${environment}".`)
           );
           return;
         }
 
-        const newKeys = Object.fromEntries(
-          Object.entries(devVars).filter(([k]) => !(k in (prodVars || {})))
-        );
+        spinner.start("Comparing environments and decrypting values...");
+        const devKeys = Object.keys(devVars);
+        const prodKeys = Object.keys(prodVars ?? {});
+        const keysToPromote: string[] = [];
 
-        if (Object.keys(newKeys).length === 0) {
-          console.log(
-            chalk.yellow(
-              `No new keys to promote. ${promotionEnvironment} is already in sync.`
-            )
-          );
-          return;
-        }
-
-        spinner.info("Decrypting new keys for editing...");
-        const decryptedNewKeys: Record<string, string> = {};
-        for (const key in newKeys) {
-          try {
-            const history = newKeys[key];
-            if (!Array.isArray(history) || history.length === 0)
-              throw new Error();
-            decryptedNewKeys[key] = decrypt(history[0].value, pek);
-          } catch {
-            decryptedNewKeys[key] = "[redenv: could not decrypt]";
+        // Find keys in dev that are not in prod
+        for (const key of devKeys) {
+          if (!prodKeys.includes(key)) {
+            keysToPromote.push(key);
           }
         }
-        spinner.stop();
 
-        const envContent = Object.entries(decryptedNewKeys)
-          .map(([k, v]) => `${k}="${v}"`)
-          .join("\n");
+        // Find keys that are in both but have different values
+        const conflictingKeys = devKeys.filter((k) => prodKeys.includes(k));
+        const decryptAndComparePromises = conflictingKeys.map(async (key) => {
+          try {
+            const devHistory = devVars[key];
+            const prodHistory = prodVars?.[key];
+            if (!Array.isArray(devHistory) || devHistory.length === 0) return;
+            if (!Array.isArray(prodHistory) || prodHistory.length === 0) return;
+
+            const devValue = await decrypt(devHistory[0].value, pek);
+            const prodValue = await decrypt(prodHistory[0].value, pek);
+
+            if (devValue !== prodValue) {
+              keysToPromote.push(key);
+            }
+          } catch {}
+        });
+        await Promise.all(decryptAndComparePromises);
+        
+        if (keysToPromote.length === 0) {
+          spinner.succeed(
+            chalk.green(`No new or changed keys to promote. ${promotionEnvironment} is already in sync.`) 
+          );
+          return;
+        }
+        spinner.succeed("Found new/changed keys.");
+
+        const decryptedKeysToPromote: Record<string, string> = {};
+        for (const key of keysToPromote) {
+            try {
+                const history = devVars[key];
+                if (!Array.isArray(history) || history.length === 0) throw new Error();
+                decryptedKeysToPromote[key] = await decrypt(history[0].value, pek);
+            } catch {
+                decryptedKeysToPromote[key] = "[redenv: could not decrypt]";
+            }
+        }
+
+        const envContent = Object.entries(decryptedKeysToPromote)
+          .map(([k, v]) => `${k}="${v}"`) 
+          .join("\n"); 
+
+        console.log(
+          chalk.cyan(`\n📝 Review and edit the variables to be promoted to ${chalk.yellow(promotionEnvironment)}:\n`)
+        );
 
         const updatedValues = await safePrompt(() =>
           multiline({
@@ -107,17 +134,15 @@ export function promoteCommand(program: Command) {
             required: true,
             spinner: true,
             default: envContent,
-            validate: (v) =>
-              v.trim().length > 0 || "Cannot promote empty values.",
+            validate: (v) => v.trim().length > 0 || "Cannot promote empty values.",
           })
         );
 
         const updatedVars = dotenv.parse(updatedValues);
 
-        const originalNewKeys = Object.keys(newKeys);
         const finalVarsToPromote = Object.fromEntries(
           Object.entries(updatedVars).filter(([k]) =>
-            originalNewKeys.includes(k)
+            keysToPromote.includes(k)
           )
         );
 
@@ -127,21 +152,18 @@ export function promoteCommand(program: Command) {
         }
 
         spinner.start(
-          `Encrypting and promoting ${
+          `Encrypting and promoting ${ 
             Object.keys(finalVarsToPromote).length
           } variable(s) to ${promotionEnvironment}...`
         );
 
-        for (const key in finalVarsToPromote) {
-          await writeSecret(
-            projectName,
-            promotionEnvironment,
-            key,
-            finalVarsToPromote[key],
-            pek,
-            { isNew: true }
-          );
-        }
+        const writePromises = Object.entries(finalVarsToPromote).map(
+          ([key, value]) => {
+            const isNew = !prodKeys.includes(key);
+            return writeSecret(projectName, promotionEnvironment, key, value, pek, { isNew });
+          }
+        );
+        await Promise.all(writePromises);
 
         spinner.succeed(
           chalk.greenBright(

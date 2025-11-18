@@ -5,7 +5,7 @@ import { password } from "@inquirer/prompts";
 import ora from "ora";
 import { deriveKey, encrypt, generateSalt } from "../core/crypto";
 import { redis } from "../core/upstash";
-import { fetchProjects, scanAll } from "../utils/redis";
+import { scanAll } from "../utils/redis";
 import fs from "fs";
 
 interface BackupData {
@@ -39,7 +39,7 @@ export function backupCommand(program: Command) {
 
       const spinner = ora("Fetching data from Redis...").start();
       try {
-        const dataToBackup: Record<string, Record<string, string>> = {};
+        const dataToBackup: Record<string, Record<string, any>> = {};
         let keysToFetch: string[] = [];
 
         if (options.project) {
@@ -48,26 +48,17 @@ export function backupCommand(program: Command) {
           const metaKey = `meta@${projectName}`;
           const envKeys = await scanAll(`*:${projectName}`);
           if ((await redis.exists(metaKey)) > 0) {
-            keysToFetch.push(metaKey, ...envKeys);
-          } else if (envKeys.length > 0) {
-            keysToFetch.push(...envKeys);
-          } else {
-            throw new Error(`Project "${projectName}" not found.`);
+            keysToFetch.push(metaKey);
+          }
+          keysToFetch.push(...envKeys);
+          
+          if (keysToFetch.length === 0) {
+            throw new Error(`Project "${projectName}" not found or has no data.`);
           }
         } else {
           spinner.text = "Fetching data for all projects...";
-          const projects = await fetchProjects();
-          if (projects.length === 0) {
-            throw new Error("No projects found to back up.");
-          }
-          const allKeys = await Promise.all(
-            projects.map(async (p) => {
-              const metaKey = `meta@${p}`;
-              const envKeys = await scanAll(`*:${p}`);
-              return [metaKey, ...envKeys];
-            })
-          );
-          keysToFetch = allKeys.flat();
+          const allKeys = await scanAll("*"); // Fetch all keys
+          keysToFetch = allKeys.filter(key => key.includes('@') || key.includes(':'));
         }
 
         if (keysToFetch.length === 0) {
@@ -78,7 +69,7 @@ export function backupCommand(program: Command) {
         for (const key of keysToFetch) {
           pipeline.hgetall(key);
         }
-        const results = await pipeline.exec<Record<string, string>[]>();
+        const results = await pipeline.exec<Record<string, any>[]>();
 
         for (let i = 0; i < keysToFetch.length; i++) {
           if (results[i]) {
@@ -89,24 +80,24 @@ export function backupCommand(program: Command) {
         spinner.text = "Encrypting backup data...";
         const salt = generateSalt();
         const backupKey = await deriveKey(backupPassword, salt);
-        const encryptedData = encrypt(JSON.stringify(dataToBackup), backupKey);
+        const encryptedData = await encrypt(JSON.stringify(dataToBackup), backupKey);
 
         const backupFile: BackupData = {
           version: 1,
           createdAt: new Date().toISOString(),
-          salt: salt.toString("hex"),
+          salt: Buffer.from(salt).toString("hex"),
           encryptedData,
         };
 
         fs.writeFileSync(options.output, JSON.stringify(backupFile, null, 2));
 
         spinner.succeed(
-          chalk.green(`✔ Successfully created encrypted backup at ${options.output}`)
+          `Successfully created encrypted backup at ${options.output}`
         );
       } catch (err) {
         if (spinner.isSpinning) {
           spinner.fail(chalk.red((err as Error).message));
-        } else {
+        } else if ((err as Error).name !== 'ExitPromptError') {
           console.log(chalk.red(`\n✘ An unexpected error occurred: ${(err as Error).message}`));
         }
         process.exit(1);
