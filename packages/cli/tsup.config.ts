@@ -4,7 +4,7 @@ export default defineConfig((options?: Partial<Options>) => ({
   tsconfig: "./tsconfig.json",
   entry: ["src/index.ts"],
   format: ["esm"],
-  outDir: "dist",
+  outDir: "bin",
   dts: false,
   bundle: true,
   splitting: false,

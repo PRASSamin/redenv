@@ -2,7 +2,7 @@
 
 A command-line interface for the Redenv Secret Management System.
 
-**For a detailed overview of the project's architecture, security model, and philosophy, please see the main [README.md](../../README.md) at the root of this repository.**
+**For a detailed overview of the project's architecture, security model, and philosophy, please see the main [README.md](https://github.com/PRASSamin/redenv/blob/main/README.md) at the root of this repository.**
 
 ---
 
@@ -95,6 +95,7 @@ Redenv offers a full suite of commands for managing your secrets. For detailed o
 - `promote`
 
 #### Auditing & History
+
 - `history`
   - `history view [key]`
   - `history limit [value]`
