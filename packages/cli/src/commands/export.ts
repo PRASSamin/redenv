@@ -10,7 +10,7 @@ import { normalize, safePrompt, sanitizeName } from "../utils";
 import { fetchEnvironments, fetchProjects } from "../utils/redis";
 import dotenv from "dotenv";
 import { unlockProject } from "../core/keys";
-import { decrypt } from "../core/crypto";
+import { decrypt } from "@redenv/core";
 
 export function exportCommand(program: Command) {
   program
@@ -53,14 +53,17 @@ export function exportCommand(program: Command) {
       const pek = await unlockProject(projectName);
 
       const redisKey = `${environment}:${projectName}`;
-      const spinner = ora(`Fetching variables from ${projectName} (${environment})...
+      const spinner =
+        ora(`Fetching variables from ${projectName} (${environment})...
 `).start();
       let versionedVars: Record<string, any> = {};
       try {
         versionedVars = (await redis.hgetall(redisKey)) || {};
         spinner.succeed(chalk.green("Variables fetched"));
       } catch (err) {
-        spinner.fail(chalk.red(`Failed to fetch variables: ${(err as Error).message}`));
+        spinner.fail(
+          chalk.red(`Failed to fetch variables: ${(err as Error).message}`)
+        );
         return;
       }
 
@@ -71,14 +74,19 @@ export function exportCommand(program: Command) {
 
       let selectedKeys: string[];
       try {
-        const exportAll = await safePrompt(() => confirm({ message: "Export ALL keys?", default: true }));
+        const exportAll = await safePrompt(() =>
+          confirm({ message: "Export ALL keys?", default: true })
+        );
         if (exportAll) {
           selectedKeys = Object.keys(versionedVars);
         } else {
           selectedKeys = await safePrompt(() =>
             checkbox({
               message: "Select keys to export:",
-              choices: Object.keys(versionedVars).map((k) => ({ name: k, value: k })),
+              choices: Object.keys(versionedVars).map((k) => ({
+                name: k,
+                value: k,
+              })),
               loop: false,
             })
           );
@@ -103,14 +111,18 @@ export function exportCommand(program: Command) {
         existingVars = dotenv.parse(existingContent);
       }
 
-      const conflicts = selectedKeys.filter((key) => Object.prototype.hasOwnProperty.call(existingVars, key));
-      
+      const conflicts = selectedKeys.filter((key) =>
+        Object.prototype.hasOwnProperty.call(existingVars, key)
+      );
+
       const diffPromises = conflicts.map(async (key) => {
         try {
           const history = versionedVars[key];
-          if (!Array.isArray(history) || history.length === 0) return { key, isDiff: true };
+          if (!Array.isArray(history) || history.length === 0)
+            return { key, isDiff: true };
           const decryptedValue = await decrypt(history[0].value, pek);
-          const isDiff = normalize(existingVars[key]) !== normalize(decryptedValue);
+          const isDiff =
+            normalize(existingVars[key]) !== normalize(decryptedValue);
           return { key, isDiff };
         } catch {
           return { key, isDiff: true }; // Treat un-decryptable values as different
@@ -118,13 +130,15 @@ export function exportCommand(program: Command) {
       });
 
       const diffResults = await Promise.all(diffPromises);
-      const diffValues = diffResults.filter(r => r.isDiff).map(r => r.key);
+      const diffValues = diffResults.filter((r) => r.isDiff).map((r) => r.key);
 
       let override = false;
       if (diffValues.length > 0) {
         override = await safePrompt(() =>
           confirm({
-            message: `The following keys already exist with different values: ${chalk.magenta(diffValues.join(", "))}. Override them?`,
+            message: `The following keys already exist with different values: ${chalk.magenta(
+              diffValues.join(", ")
+            )}. Override them?`,
             default: false,
           })
         );
@@ -137,7 +151,9 @@ export function exportCommand(program: Command) {
       }
 
       if (keysToWrite.length === 0) {
-        console.log(chalk.green("✔ Nothing to export. Everything is already in sync."));
+        console.log(
+          chalk.green("✔ Nothing to export. Everything is already in sync.")
+        );
         return;
       }
 
@@ -148,7 +164,8 @@ export function exportCommand(program: Command) {
         const lines = finalContent.split("\n");
         const newLines = lines.map((line) => {
           const trimmedLine = line.trim();
-          if (trimmedLine.startsWith("#") || !trimmedLine.includes("=")) return line;
+          if (trimmedLine.startsWith("#") || !trimmedLine.includes("="))
+            return line;
           const keyMatch = trimmedLine.match(/^([^=]+)=/);
           if (keyMatch) {
             const key = keyMatch[1].trim();
@@ -163,13 +180,17 @@ export function exportCommand(program: Command) {
 
       let contentToAppend = "";
       if (keysToWrite.length > 0) {
-        contentToAppend += finalContent.endsWith("\n\n") || finalContent.length === 0 ? "" : "\n";
+        contentToAppend +=
+          finalContent.endsWith("\n\n") || finalContent.length === 0
+            ? ""
+            : "\n";
         contentToAppend += `\n# Variables exported by redenv from ${projectName} (${environment}) at ${new Date().toISOString()}\n`;
-        
+
         const decryptionPromises = keysToWrite.map(async (key) => {
           try {
             const history = versionedVars[key];
-            if (!Array.isArray(history) || history.length === 0) throw new Error();
+            if (!Array.isArray(history) || history.length === 0)
+              throw new Error();
             const decryptedValue = await decrypt(history[0].value, pek);
             return `${key}="${decryptedValue}"\n`;
           } catch {
@@ -177,16 +198,22 @@ export function exportCommand(program: Command) {
           }
         });
         const linesToAppend = await Promise.all(decryptionPromises);
-        contentToAppend += linesToAppend.join('');
+        contentToAppend += linesToAppend.join("");
       }
 
       finalContent += contentToAppend;
 
       try {
         fs.writeFileSync(filePath, finalContent);
-        console.log(chalk.green(`✔ Exported ${keysToWrite.length} keys to ${chalk.blue(outputFile)}`));
+        console.log(
+          chalk.green(
+            `✔ Exported ${keysToWrite.length} keys to ${chalk.blue(outputFile)}`
+          )
+        );
       } catch (err) {
-        console.log(chalk.red(`✘ Failed to write file: ${(err as Error).message}`));
+        console.log(
+          chalk.red(`✘ Failed to write file: ${(err as Error).message}`)
+        );
       }
     });
 }

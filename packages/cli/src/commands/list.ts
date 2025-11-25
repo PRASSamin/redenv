@@ -8,7 +8,7 @@ import { select } from "@inquirer/prompts";
 import { safePrompt, sanitizeName } from "../utils";
 import { fetchEnvironments } from "../utils/redis";
 import { unlockProject } from "../core/keys";
-import { type CryptoKey, decrypt } from "../core/crypto";
+import { type CryptoKey, decrypt } from "@redenv/core";
 
 async function fetchAndDisplayVariables(
   redisKey: string,
@@ -43,7 +43,7 @@ async function fetchAndDisplayVariables(
     });
 
     const sorted = Object.entries(envs).sort(([a], [b]) => a.localeCompare(b));
-    
+
     // Decrypt all values in parallel for performance
     const decryptionPromises = sorted.map(async ([key, history]) => {
       try {
@@ -51,7 +51,10 @@ async function fetchAndDisplayVariables(
           throw new Error("Invalid history format");
         }
         const latestVersion = history[0];
-        const decryptedValue = await decrypt(latestVersion.value, decryptionKey);
+        const decryptedValue = await decrypt(
+          latestVersion.value,
+          decryptionKey
+        );
         return [key, decryptedValue];
       } catch (e) {
         return [key, chalk.yellow(`[Corrupted or invalid data]`)];
@@ -61,7 +64,10 @@ async function fetchAndDisplayVariables(
     const decryptedRows = await Promise.all(decryptionPromises);
 
     for (const [key, decryptedValue] of decryptedRows) {
-        table.push([chalk.blue(key as string), chalk.green(decryptedValue as string)]);
+      table.push([
+        chalk.blue(key as string),
+        chalk.green(decryptedValue as string),
+      ]);
     }
 
     console.log(table.toString());
@@ -100,7 +106,11 @@ export function listCommand(program: Command) {
         if (!environment) {
           const envs = await fetchEnvironments(projectName, true);
           if (envs.length === 0) {
-            console.log(chalk.yellow(`No environments found for project "${projectName}".`));
+            console.log(
+              chalk.yellow(
+                `No environments found for project "${projectName}".`
+              )
+            );
             return;
           }
           environment = await safePrompt(() =>
@@ -115,8 +125,12 @@ export function listCommand(program: Command) {
         await fetchAndDisplayVariables(redisKey, pek);
       } catch (err) {
         // Errors from unlockProject are handled, so we don't need to log them again
-        if ((err as Error).name !== 'ExitPromptError') {
-            console.log(chalk.red(`\n✘ An unexpected error occurred: ${(err as Error).message}`));
+        if ((err as Error).name !== "ExitPromptError") {
+          console.log(
+            chalk.red(
+              `\n✘ An unexpected error occurred: ${(err as Error).message}`
+            )
+          );
         }
       }
     });

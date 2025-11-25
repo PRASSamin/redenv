@@ -5,9 +5,16 @@ import { safePrompt, sanitizeName } from "../utils";
 import { fetchProjects } from "../utils/redis";
 import { select, password } from "@inquirer/prompts";
 import { forgetProjectKey } from "../core/keys";
-import { deriveKey, encrypt, decrypt, importKey, exportKey } from "../core/crypto";
+import {
+  deriveKey,
+  encrypt,
+  decrypt,
+  importKey,
+  exportKey,
+  hexToBuffer,
+} from "@redenv/core";
 import { redis } from "../core/upstash";
-import ora, { Ora } from "ora";
+import ora, { type Ora } from "ora";
 
 export function changePasswordCommand(program: Command) {
   program
@@ -55,9 +62,12 @@ export function changePasswordCommand(program: Command) {
           throw new Error("Could not retrieve project metadata.");
         }
 
-        const salt = Buffer.from(metadata.salt, "hex");
+        const salt = hexToBuffer(metadata.salt);
         const passwordDerivedKey = await deriveKey(currentMasterPassword, salt);
-        const decryptedPEKHex = await decrypt(metadata.encryptedPEK, passwordDerivedKey);
+        const decryptedPEKHex = await decrypt(
+          metadata.encryptedPEK,
+          passwordDerivedKey
+        );
         const pek = await importKey(decryptedPEKHex);
         spinner.succeed("Current password verified.");
 
@@ -83,7 +93,10 @@ export function changePasswordCommand(program: Command) {
 
         const newPasswordDerivedKey = await deriveKey(newMasterPassword, salt);
         const exportedPEK = await exportKey(pek);
-        const newEncryptedPEK = await encrypt(exportedPEK, newPasswordDerivedKey);
+        const newEncryptedPEK = await encrypt(
+          exportedPEK,
+          newPasswordDerivedKey
+        );
 
         await redis.hset(metaKey, { encryptedPEK: newEncryptedPEK });
         await forgetProjectKey(projectName);

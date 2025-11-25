@@ -1,0 +1,45 @@
+{
+  "name": "@redenv/core",
+  "version": "1.0.0",
+  "description": "Core cryptographic and utility functions for the Redenv ecosystem.",
+  "author": {
+    "name": "PRAS",
+    "email": "prassamin@gmail.com",
+    "url": "https://pras.me"
+  },
+  "license": "MIT",
+  "keywords": [
+    "redenv",
+    "core",
+    "crypto",
+    "web-crypto",
+    "internal"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PRASSamin/redenv.git"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsup"
+  },
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@upstash/redis": "^1.35.6"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

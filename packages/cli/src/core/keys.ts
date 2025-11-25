@@ -1,14 +1,8 @@
 import { password, confirm } from "@inquirer/prompts";
 import { safePrompt } from "../utils";
 import { redis } from "./upstash";
-import {
-  type CryptoKey,
-  deriveKey,
-  decrypt,
-  exportKey,
-  importKey,
-} from "./crypto";
-import ora, { Ora } from "ora";
+import { deriveKey, decrypt, exportKey, importKey } from "@redenv/core";
+import ora, { type Ora } from "ora";
 import keytar from "keytar";
 import chalk from "chalk";
 

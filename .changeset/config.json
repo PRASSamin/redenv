@@ -6,5 +6,6 @@
   "access": "public",
   "baseBranch": "main",
   "changelog": false,
-  "updateInternalDependencies": "patch"
+  "updateInternalDependencies": "patch",
+  "ignore": ["next"]
 }

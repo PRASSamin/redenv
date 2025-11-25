@@ -2,11 +2,13 @@ import chalk from "chalk";
 import { Command } from "commander";
 import ora from "ora";
 import { loadProjectConfig } from "../core/config";
-import { safePrompt, sanitizeName } from "../utils";
-import { fetchEnvironments, writeSecret } from "../utils/redis";
+import { safePrompt, sanitizeName, getAuditUser } from "../utils";
+import { fetchEnvironments } from "../utils/redis";
 import { select } from "@inquirer/prompts";
 import { multiline } from "@cli-prompts/multiline";
 import { unlockProject } from "../core/keys";
+import { writeSecret } from "@redenv/core";
+import { redis } from "../core/upstash";
 
 export function editCommand(program: Command) {
   program
@@ -27,10 +29,8 @@ export function editCommand(program: Command) {
         return;
       }
 
-      const projectName =
-        sanitizeName(options.project) || projectConfig?.name;
-      let environment =
-        sanitizeName(options.env) || projectConfig?.environment;
+      const projectName = sanitizeName(options.project) || projectConfig?.name;
+      let environment = sanitizeName(options.env) || projectConfig?.environment;
 
       if (!environment) {
         const envs = (await fetchEnvironments(projectName, true)) || [];
@@ -64,9 +64,24 @@ export function editCommand(program: Command) {
           )} (${environment})...`
         ).start();
 
-        await writeSecret(projectName, environment, key, newValue, pek, {
-          isNew: false,
-        });
+        // Prevent editing a non-existent key
+        const redisKey = `${environment}:${projectName}`;
+        const exists = (await redis.hexists(redisKey, key)) > 0;
+        if (!exists) {
+          throw new Error(
+            `Key '${key}' does not exist. Use 	redenv add ${key} <value>	to create it.`
+          );
+        }
+
+        await writeSecret(
+          redis,
+          projectName,
+          environment,
+          key,
+          newValue,
+          pek,
+          getAuditUser()
+        );
 
         spinner.succeed(
           chalk.greenBright(
@@ -81,7 +96,8 @@ export function editCommand(program: Command) {
           spinner.fail(chalk.red(error.message));
         } else if (error.name !== "ExitPromptError") {
           console.log(
-            chalk.red(`\n✘ An unexpected error occurred: ${error.message}`)
+            chalk.red(`
+✘ An unexpected error occurred: ${error.message}`)
           );
         }
         process.exit(1);

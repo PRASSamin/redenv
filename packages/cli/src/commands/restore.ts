@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { safePrompt } from "../utils";
 import { confirm, password } from "@inquirer/prompts";
 import ora from "ora";
-import { deriveKey, decrypt } from "../core/crypto";
+import { deriveKey, decrypt } from "@redenv/core";
 import { redis } from "../core/upstash";
 import fs from "fs";
 
@@ -39,10 +39,14 @@ export function restoreCommand(program: Command) {
 
         const salt = Buffer.from(backupFile.salt, "hex");
         const backupKey = await deriveKey(backupPassword, salt);
-        const decryptedData = await decrypt(backupFile.encryptedData, backupKey);
-        const dataToRestore: Record<string, Record<string, any>> =
-          JSON.parse(decryptedData);
-        
+        const decryptedData = await decrypt(
+          backupFile.encryptedData,
+          backupKey
+        );
+        const dataToRestore: Record<string, Record<string, any>> = JSON.parse(
+          decryptedData
+        );
+
         spinner.succeed("Backup file decrypted successfully.");
 
         const keysToRestore = Object.keys(dataToRestore);
@@ -53,7 +57,7 @@ export function restoreCommand(program: Command) {
 
         for (const key of keysToRestore) {
           if (key.includes("@")) {
-            const projectName = key.split("@")[1];
+            const projectName = key.split("@")[1] ?? "";
             if (!projectsInBackup[projectName]) {
               projectsInBackup[projectName] = {
                 environments: [],
@@ -63,13 +67,16 @@ export function restoreCommand(program: Command) {
             projectsInBackup[projectName].hasMeta = true;
           } else if (key.includes(":")) {
             const [environment, projectName] = key.split(":");
+            if (!environment || !projectName) {
+              continue;
+            }
             if (!projectsInBackup[projectName]) {
               projectsInBackup[projectName] = {
                 environments: [],
                 hasMeta: false,
               };
             }
-            projectsInBackup[projectName].environments.push(environment);
+            projectsInBackup[projectName]?.environments.push(environment);
           }
         }
 
@@ -79,10 +86,10 @@ export function restoreCommand(program: Command) {
         for (const projectName in projectsInBackup) {
           const projectData = projectsInBackup[projectName];
           displayString += `\n  ${chalk.bold.yellow(projectName)}`;
-          projectData.environments
+          projectData?.environments
             .sort()
             .forEach((env) => (displayString += `\n    - ${env}`));
-          if (projectData.hasMeta) {
+          if (projectData?.hasMeta) {
             displayString += `\n    ${chalk.gray("- (Project Metadata)")}`;
           }
         }
@@ -110,7 +117,9 @@ export function restoreCommand(program: Command) {
           // We must stringify them before restoring.
           const stringifiedValues: Record<string, string> = {};
           for (const field in dataToRestore[key]) {
-            stringifiedValues[field] = JSON.stringify(dataToRestore[key][field]);
+            stringifiedValues[field] = JSON.stringify(
+              dataToRestore[key][field]
+            );
           }
           pipeline.hset(key, stringifiedValues);
         }
@@ -119,12 +128,15 @@ export function restoreCommand(program: Command) {
         restoreSpinner.succeed(
           `Successfully restored data for ${keysToRestore.length} keys.`
         );
-
       } catch (err) {
         if (spinner.isSpinning) {
           spinner.fail(chalk.red((err as Error).message));
-        } else if ((err as Error).name !== 'ExitPromptError') {
-          console.log(chalk.red(`\n✘ An unexpected error occurred: ${(err as Error).message}`));
+        } else if ((err as Error).name !== "ExitPromptError") {
+          console.log(
+            chalk.red(
+              `\n✘ An unexpected error occurred: ${(err as Error).message}`
+            )
+          );
         }
         process.exit(1);
       }

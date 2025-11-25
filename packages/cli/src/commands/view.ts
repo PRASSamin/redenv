@@ -8,7 +8,7 @@ import { select } from "@inquirer/prompts";
 import { safePrompt, sanitizeName } from "../utils";
 import { fetchEnvironments } from "../utils/redis";
 import { unlockProject } from "../core/keys";
-import { decrypt } from "../core/crypto";
+import { decrypt } from "@redenv/core";
 
 export function viewCommand(program: Command) {
   program
@@ -95,10 +95,12 @@ export function viewCommand(program: Command) {
         console.log(table.toString());
       } catch (err) {
         // Errors from unlockProject are handled within the function, so this will catch other errors.
-        if ((err as Error).name !== 'ExitPromptError') {
-            console.log(
-              chalk.red(`\n✘ An unexpected error occurred: ${(err as Error).message}`)
-            );
+        if ((err as Error).name !== "ExitPromptError") {
+          console.log(
+            chalk.red(
+              `\n✘ An unexpected error occurred: ${(err as Error).message}`
+            )
+          );
         }
       }
     });

@@ -7,7 +7,7 @@ import { loadProjectConfig } from "../core/config";
 import { nameValidator, safePrompt, sanitizeName } from "../utils";
 import { fetchEnvironments, fetchProjects } from "../utils/redis";
 import { unlockProject } from "../core/keys";
-import { decrypt } from "../core/crypto";
+import { decrypt } from "@redenv/core";
 
 export function cloneCommand(program: Command) {
   program
@@ -24,7 +24,7 @@ export function cloneCommand(program: Command) {
       from = sanitizeName(from);
       to = sanitizeName(to);
 
-      let config = options.project ? null : loadProjectConfig();
+      const config = options.project ? null : loadProjectConfig();
       project = project || config?.name;
 
       if (!project) {
@@ -45,7 +45,9 @@ export function cloneCommand(program: Command) {
 
       const envs = (await fetchEnvironments(project)) || [];
       if (!envs.length || envs.length === 0) {
-        console.log(chalk.red('✘ No environments found for project "' + project + '".'));
+        console.log(
+          chalk.red('✘ No environments found for project "' + project + '".')
+        );
         return;
       }
 
@@ -62,7 +64,12 @@ export function cloneCommand(program: Command) {
         to = await safePrompt(() =>
           select({
             message: "Select destination environment:",
-            choices: [...envs.filter((e) => e !== from).map((e) => ({ name: e, value: e })), { name: "New environment", value: "New environment" }],
+            choices: [
+              ...envs
+                .filter((e) => e !== from)
+                .map((e) => ({ name: e, value: e })),
+              { name: "New environment", value: "New environment" },
+            ],
           })
         );
         if (to === "New environment") {
@@ -71,7 +78,8 @@ export function cloneCommand(program: Command) {
               required: true,
               message: "Enter new environment name:",
               validate: (input) => {
-                if (input === from) return "Environment name cannot be the same as source.";
+                if (input === from)
+                  return "Environment name cannot be the same as source.";
                 return nameValidator(input);
               },
             })
@@ -100,16 +108,24 @@ export function cloneCommand(program: Command) {
         return;
       }
 
-      let missingKeys = Object.keys(sourceVars).filter((k) => !(k in destVars));
+      const missingKeys = Object.keys(sourceVars).filter((k) => !(k in destVars));
       if (missingKeys.length === 0) {
-        console.log(chalk.green(`✔ Everything is already synced! No new keys to clone from ${from} → ${to}.`));
+        console.log(
+          chalk.green(
+            `✔ Everything is already synced! No new keys to clone from ${from} → ${to}.`
+          )
+        );
         return;
       }
 
       let selectedKeys: string[] = [];
       if (keyArg) {
         if (!missingKeys.includes(keyArg)) {
-          console.log(chalk.yellow(`✘ Key '${keyArg}' already exists in ${to} environment.`));
+          console.log(
+            chalk.yellow(
+              `✘ Key '${keyArg}' already exists in ${to} environment.`
+            )
+          );
           return;
         }
         selectedKeys = [keyArg];
@@ -136,7 +152,8 @@ export function cloneCommand(program: Command) {
       const displayPromises = selectedKeys.map(async (k) => {
         try {
           const history = sourceVars[k];
-          if (!Array.isArray(history) || history.length === 0) throw new Error();
+          if (!Array.isArray(history) || history.length === 0)
+            throw new Error();
           const latestValue = await decrypt(history[0].value, pek);
           return `  • ${k}=${latestValue}`;
         } catch {
@@ -146,7 +163,15 @@ export function cloneCommand(program: Command) {
       const displayLines = await Promise.all(displayPromises);
       console.log(displayLines.join("\n"));
 
-      const confirm = await safePrompt(() => select({ message: "Proceed?", choices: [{name: "Yes", value: "yes"}, {name: "No", value: "no"}] }));
+      const confirm = await safePrompt(() =>
+        select({
+          message: "Proceed?",
+          choices: [
+            { name: "Yes", value: "yes" },
+            { name: "No", value: "no" },
+          ],
+        })
+      );
       if (confirm === "no") {
         console.log(chalk.yellow("✘ Cancelled."));
         return;
@@ -155,11 +180,13 @@ export function cloneCommand(program: Command) {
       const apply = ora("Cloning...").start();
       try {
         const dataToStore: Record<string, string> = {};
-        for(const key in newData) {
-            dataToStore[key] = JSON.stringify(newData[key]);
+        for (const key in newData) {
+          dataToStore[key] = JSON.stringify(newData[key]);
         }
         await redis.hset(destKey, dataToStore);
-        apply.succeed(`Successfully cloned ${selectedKeys.length} key(s) from ${from} → ${to}!`);
+        apply.succeed(
+          `Successfully cloned ${selectedKeys.length} key(s) from ${from} → ${to}!`
+        );
       } catch (err) {
         apply.fail(chalk.red(`Failed: ${(err as Error).message}`));
       }

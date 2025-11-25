@@ -5,7 +5,7 @@ import { safePrompt, sanitizeName } from "../utils";
 import { fetchEnvironments, fetchProjects } from "../utils/redis";
 import { select, input } from "@inquirer/prompts";
 import { unlockProject } from "../core/keys";
-import { decrypt } from "../core/crypto";
+import { decrypt } from "@redenv/core";
 import { redis } from "../core/upstash";
 import ora from "ora";
 import Table from "cli-table3";

@@ -1,15 +1,20 @@
 import chalk from "chalk";
-import ora, { Ora } from "ora";
+import ora, {type Ora } from "ora";
 import { Command } from "commander";
 import { redis } from "../core/upstash";
 import { loadProjectConfig } from "../core/config";
-import { nameValidator, safePrompt, writeProjectConfig } from "../utils";
+import {
+  getAuditUser,
+  nameValidator,
+  safePrompt,
+  writeProjectConfig,
+} from "../utils";
 import { input } from "@inquirer/prompts";
 import dotenv from "dotenv";
 import { unlockProject } from "../core/keys";
-import { decrypt } from "../core/crypto";
+import { decrypt } from "@redenv/core";
 import { multiline } from "@cli-prompts/multiline";
-import { writeSecret } from "../utils/redis";
+import { writeSecret } from "@redenv/core";
 
 export function promoteCommand(program: Command) {
   program
@@ -17,7 +22,8 @@ export function promoteCommand(program: Command) {
     .description(
       "Promote new or changed variables from a source environment to a destination"
     )
-    .action(async () => {
+    .option("-t, --to <to>", "Destination environment name", "production")
+    .action(async (options) => {
       const projectConfig = loadProjectConfig();
       if (!projectConfig) {
         console.log(
@@ -34,7 +40,7 @@ export function promoteCommand(program: Command) {
         writeProjectConfig({ environment });
       }
 
-      let promotionEnvironment = projectConfig.productionEnvironment;
+      let promotionEnvironment = projectConfig.productionEnvironment || options.to;
       if (!promotionEnvironment) {
         promotionEnvironment = await safePrompt(() =>
           input({
@@ -65,7 +71,9 @@ export function promoteCommand(program: Command) {
 
         if (!devVars || Object.keys(devVars).length === 0) {
           console.log(
-            chalk.yellow(`No variables found in source environment "${environment}".`)
+            chalk.yellow(
+              `No variables found in source environment "${environment}".`
+            )
           );
           return;
         }
@@ -97,13 +105,17 @@ export function promoteCommand(program: Command) {
             if (devValue !== prodValue) {
               keysToPromote.push(key);
             }
-          } catch {}
+          } catch {
+            // Ignore
+          }
         });
         await Promise.all(decryptAndComparePromises);
-        
+
         if (keysToPromote.length === 0) {
           spinner.succeed(
-            chalk.green(`No new or changed keys to promote. ${promotionEnvironment} is already in sync.`) 
+            chalk.green(
+              `No new or changed keys to promote. ${promotionEnvironment} is already in sync.`
+            )
           );
           return;
         }
@@ -111,21 +123,26 @@ export function promoteCommand(program: Command) {
 
         const decryptedKeysToPromote: Record<string, string> = {};
         for (const key of keysToPromote) {
-            try {
-                const history = devVars[key];
-                if (!Array.isArray(history) || history.length === 0) throw new Error();
-                decryptedKeysToPromote[key] = await decrypt(history[0].value, pek);
-            } catch {
-                decryptedKeysToPromote[key] = "[redenv: could not decrypt]";
-            }
+          try {
+            const history = devVars[key];
+            if (!Array.isArray(history) || history.length === 0)
+              throw new Error();
+            decryptedKeysToPromote[key] = await decrypt(history[0].value, pek);
+          } catch {
+            decryptedKeysToPromote[key] = "[redenv: could not decrypt]";
+          }
         }
 
         const envContent = Object.entries(decryptedKeysToPromote)
-          .map(([k, v]) => `${k}="${v}"`) 
-          .join("\n"); 
+          .map(([k, v]) => `${k}="${v}"`)
+          .join("\n");
 
         console.log(
-          chalk.cyan(`\n📝 Review and edit the variables to be promoted to ${chalk.yellow(promotionEnvironment)}:\n`)
+          chalk.cyan(
+            `\n📝 Review and edit the variables to be promoted to ${chalk.yellow(
+              promotionEnvironment
+            )}:\n`
+          )
         );
 
         const updatedValues = await safePrompt(() =>
@@ -134,16 +151,15 @@ export function promoteCommand(program: Command) {
             required: true,
             spinner: true,
             default: envContent,
-            validate: (v) => v.trim().length > 0 || "Cannot promote empty values.",
+            validate: (v) =>
+              v.trim().length > 0 || "Cannot promote empty values.",
           })
         );
 
         const updatedVars = dotenv.parse(updatedValues);
 
         const finalVarsToPromote = Object.fromEntries(
-          Object.entries(updatedVars).filter(([k]) =>
-            keysToPromote.includes(k)
-          )
+          Object.entries(updatedVars).filter(([k]) => keysToPromote.includes(k))
         );
 
         if (Object.keys(finalVarsToPromote).length === 0) {
@@ -152,15 +168,22 @@ export function promoteCommand(program: Command) {
         }
 
         spinner.start(
-          `Encrypting and promoting ${ 
+          `Encrypting and promoting ${
             Object.keys(finalVarsToPromote).length
           } variable(s) to ${promotionEnvironment}...`
         );
 
         const writePromises = Object.entries(finalVarsToPromote).map(
           ([key, value]) => {
-            const isNew = !prodKeys.includes(key);
-            return writeSecret(projectName, promotionEnvironment, key, value, pek, { isNew });
+            return writeSecret(
+              redis,
+              projectName,
+              promotionEnvironment,
+              key,
+              value,
+              pek,
+              getAuditUser()
+            );
           }
         );
         await Promise.all(writePromises);

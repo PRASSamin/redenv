@@ -1,11 +1,13 @@
 import chalk from "chalk";
-import ora, { Ora } from "ora";
+import ora, { type Ora } from "ora";
 import { Command } from "commander";
 import { loadProjectConfig } from "../core/config";
-import { sanitizeName, safePrompt } from "../utils";
+import { sanitizeName, safePrompt, getAuditUser } from "../utils";
 import { unlockProject } from "../core/keys";
-import { fetchEnvironments, writeSecret } from "../utils/redis";
+import { fetchEnvironments } from "../utils/redis";
 import { select } from "@inquirer/prompts";
+import { writeSecret } from "@redenv/core";
+import { redis } from "../core/upstash";
 
 export function addCommand(program: Command) {
   program
@@ -27,10 +29,8 @@ export function addCommand(program: Command) {
         return;
       }
 
-      const projectName =
-        sanitizeName(options.project) || projectConfig?.name;
-      let environment =
-        sanitizeName(options.env) || projectConfig?.environment;
+      const projectName = sanitizeName(options.project) || projectConfig?.name;
+      let environment = sanitizeName(options.env) || projectConfig?.environment;
 
       if (!environment) {
         const envs = await fetchEnvironments(projectName, true);
@@ -51,9 +51,24 @@ export function addCommand(program: Command) {
           )} (${environment})...`
         ).start();
 
-        await writeSecret(projectName, environment, key, value, pek, {
-          isNew: true,
-        });
+        // Prevent accidental overwrites, which the core `writeSecret` does not do.
+        const redisKey = `${environment}:${projectName}`;
+        const exists = (await redis.hexists(redisKey, key)) > 0;
+        if (exists) {
+          throw new Error(
+            `Key '${key}' already exists. Use 	redenv edit ${key}	 to update it.`
+          );
+        }
+
+        await writeSecret(
+          redis,
+          projectName,
+          environment,
+          key,
+          value,
+          pek,
+          getAuditUser()
+        );
 
         spinner.succeed(
           chalk.greenBright(
@@ -68,7 +83,8 @@ export function addCommand(program: Command) {
           spinner.fail(chalk.red(error.message));
         } else if (error.name !== "ExitPromptError") {
           console.log(
-            chalk.red(`\n✘ An unexpected error occurred: ${error.message}`)
+            chalk.red(`
+✘ An unexpected error occurred: ${error.message}`)
           );
         }
         process.exit(1);

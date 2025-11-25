@@ -7,7 +7,7 @@ import {
   loadProjectConfig,
   loadMemoryConfig,
   saveToMemoryConfig,
-  Credential,
+  type Credential,
 } from "./core/config";
 import { password, input, select } from "@inquirer/prompts";
 import { addCommand } from "./commands/add";

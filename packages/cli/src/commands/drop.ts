@@ -2,7 +2,7 @@ import chalk from "chalk";
 import { Command } from "commander";
 import { loadProjectConfig } from "../core/config";
 import { redis } from "../core/upstash";
-import ora, { Ora } from "ora";
+import ora, { type Ora } from "ora";
 import { confirm, select, checkbox } from "@inquirer/prompts";
 import { safePrompt, sanitizeName } from "../utils";
 import { fetchEnvironments, fetchProjects, scanAll } from "../utils/redis";
@@ -21,7 +21,7 @@ export function dropCommand(program: Command) {
     .action(async (envs: string[], options) => {
       let spinner: Ora | undefined;
       try {
-        let projectName = 
+        let projectName =
           sanitizeName(options.project) || loadProjectConfig()?.name;
 
         if (!projectName) {
@@ -44,7 +44,9 @@ export function dropCommand(program: Command) {
           const availableEnvs = await fetchEnvironments(projectName);
           if (availableEnvs.length === 0) {
             console.log(
-              chalk.yellow(`No environments found for project "${projectName}".`)
+              chalk.yellow(
+                `No environments found for project "${projectName}".`
+              )
             );
             return;
           }
@@ -84,7 +86,9 @@ export function dropCommand(program: Command) {
         await verifyPassword(projectName);
 
         const redisKeys = envsToDrop.map((env) => `${env}:${projectName}`);
-        spinner = ora(`Dropping ${envsToDrop.length} environment(s)...`).start();
+        spinner = ora(
+          `Dropping ${envsToDrop.length} environment(s)...`
+        ).start();
         await redis.del(...redisKeys);
         spinner.succeed("Successfully dropped environment(s).");
       } catch (err) {
@@ -103,7 +107,9 @@ export function dropCommand(program: Command) {
   // --- drop project ---
   dropCmd
     .command("project [projects...]")
-    .description("Permanently delete one or more projects and all of their data")
+    .description(
+      "Permanently delete one or more projects and all of their data"
+    )
     .action(async (projects: string[]) => {
       let projectsToDrop = projects.map(sanitizeName);
 
@@ -131,7 +137,9 @@ export function dropCommand(program: Command) {
       console.log(
         chalk.cyan.bold("\nProjects selected for complete deletion:")
       );
-      console.log(chalk.yellow(projectsToDrop.map((p) => `  - ${p}`).join("\n")));
+      console.log(
+        chalk.yellow(projectsToDrop.map((p) => `  - ${p}`).join("\n"))
+      );
 
       const confirmation = await safePrompt(() =>
         confirm({

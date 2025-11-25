@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2025-11-25
+
+### Changed
+- Moved the crypto logic to the `@redenv/core` package.
+
 ## [1.1.0] - 2025-11-18
 
 ### Changed
@@ -33,7 +38,7 @@ This is the initial public release of the Redenv CLI, a secure, feature-rich, an
   - `backup` & `restore`: Create and restore fully encrypted backups of your projects.
   - `doctor`: A diagnostic tool to check your configuration and connectivity.
 - **Application Access Management:**
-  - `token` command suite (`create`, `list`, `revoke`) to manage secure, read-only Service Tokens for applications.
+  - `token` command suite (`create`, `list`, `revoke`) to manage secure, Service Tokens for applications.
 - **Secure Password Caching:** Implemented an optional, secure caching of unlocked project keys into the native OS keychain (`keytar`) for a seamless, password-less workflow during a session.
 - **Unit Testing Foundation:** Introduced `vitest` and created a foundational test suite for the critical crypto and utility modules.
 - **Comprehensive Documentation:** Created a detailed architectural `README.md` for the project root and a practical quick-start guide for the CLI package.

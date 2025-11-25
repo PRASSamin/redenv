@@ -11,7 +11,8 @@ import {
   generateRandomKey,
   generateSalt,
   exportKey,
-} from "../core/crypto";
+  bufferToHex,
+} from "@redenv/core";
 import { redis } from "../core/upstash";
 import { unlockProject } from "../core/keys";
 
@@ -82,9 +83,7 @@ export function registerCommand(program: Command) {
       }
 
       // --- Flow for creating a NEW project ---
-      console.log(
-        chalk.blue(`Creating new project "${sanitizedProject}"...`)
-      );
+      console.log(chalk.blue(`Creating new project "${sanitizedProject}"...`));
       const masterPassword = await safePrompt(() =>
         password({
           message: `Create a Master Password for project "${sanitizedProject}":`,
@@ -118,7 +117,7 @@ export function registerCommand(program: Command) {
 
         const metadata = {
           encryptedPEK: encryptedPEK,
-          salt: Buffer.from(salt).toString("hex"),
+          salt: bufferToHex(salt as any),
           historyLimit: historyLimit,
           kdf: "pbkdf2",
           algorithm: "aes-256-gcm",

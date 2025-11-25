@@ -1,13 +1,13 @@
 import chalk from "chalk";
 import { Command } from "commander";
 import { loadProjectConfig } from "../core/config";
-import { safePrompt, sanitizeName } from "../utils";
-import { fetchEnvironments, fetchProjects, writeSecret } from "../utils/redis";
+import { getAuditUser, safePrompt, sanitizeName } from "../utils";
+import { fetchEnvironments, fetchProjects } from "../utils/redis";
 import { select, confirm } from "@inquirer/prompts";
 import { unlockProject } from "../core/keys";
-import { decrypt } from "../core/crypto";
+import { decrypt, writeSecret } from "@redenv/core";
 import { redis } from "../core/upstash";
-import ora, { Ora } from "ora";
+import ora, { type Ora } from "ora";
 import Table from "cli-table3";
 
 export function rollbackCommand(program: Command) {
@@ -86,7 +86,9 @@ export function rollbackCommand(program: Command) {
 
           if (filteredChoices.length === 0) {
             console.log(
-              chalk.yellow("No secrets with multiple versions available for rollback.")
+              chalk.yellow(
+                "No secrets with multiple versions available for rollback."
+              )
             );
             return;
           }
@@ -219,14 +221,13 @@ export function rollbackCommand(program: Command) {
 
         spinner.start("Rolling back secret...");
         await writeSecret(
+          redis,
           projectName,
           environment,
           targetKey,
           decryptedValue,
           pek,
-          {
-            isNew: false,
-          }
+          getAuditUser()
         );
         spinner.succeed(
           `Successfully rolled back "${targetKey}" by creating a new version with the content of version ${targetVersion.version}.`

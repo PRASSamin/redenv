@@ -1,11 +1,52 @@
 {
   "name": "@redenv/client",
-  "module": "src/index.ts",
+  "version": "1.0.0",
+  "description": "A lightweight, caching client for securely fetching secrets from Redenv in any server-side JavaScript or TypeScript application.",
+  "author": {
+    "name": "PRAS",
+    "email": "prassamin@gmail.com",
+    "url": "https://pras.me"
+  },
+  "license": "MIT",
+  "keywords": [
+    "client",
+    "sdk",
+    "env",
+    "secrets",
+    "security",
+    "upstash",
+    "redis",
+    "dotenv",
+    "caching",
+    "serverless",
+    "edge"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PRASSamin/redenv.git"
+  },
   "type": "module",
-  "devDependencies": {
-    "typescript": "^5"
+  "scripts": {
+    "build": "tsup"
+  },
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
   },
   "dependencies": {
-    "@upstash/redis": "^1.35.6"
+    "@redenv/core": "workspace:*",
+    "@upstash/redis": "^1.35.6",
+    "cachified": "3.0.0",
+    "lru-cache": "10.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5"
   }
 }
