@@ -8,16 +8,16 @@ import { fetchEnvironments } from "../utils/redis";
 import { select } from "@inquirer/prompts";
 import { writeSecret } from "@redenv/core";
 import { redis } from "../core/upstash";
+import { multiline } from "@cli-prompts/multiline";
 
 export function addCommand(program: Command) {
   program
     .command("add")
     .argument("<key>", "The ENV key to add")
-    .argument("<value>", "The value to assign to the ENV key")
     .description("Add a new environment variable to your project")
     .option("-p, --project <name>", "Specify the project name")
     .option("-e, --env <env>", "Specify the environment")
-    .action(async (key, value, options) => {
+    .action(async (key, options) => {
       const projectConfig = loadProjectConfig();
 
       if (!projectConfig && !options.project) {
@@ -41,6 +41,17 @@ export function addCommand(program: Command) {
           })
         );
       }
+
+      const value = await safePrompt(() =>
+        multiline({
+          prompt: `Enter value for ${key}:`,
+          required: true,
+          validate(value) {
+            if (!value.trim()) return "You must enter something.";
+            return true;
+          },
+        })
+      );
 
       let spinner: Ora | undefined;
       try {

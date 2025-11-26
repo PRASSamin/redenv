@@ -32,10 +32,53 @@ export const hexToBuffer = (hex: string): Uint8Array => {
 // --- Core Functions ---
 
 /**
- * Generates a random byte array of the specified length.
+ * Generates cryptographically secure random bytes.
+ * @param length - The number of bytes to generate. Defaults to 32.
+ * @returns A Uint8Array with an enhanced toString method for encoding.
  */
-export function randomBytes(length: number = 16): Uint8Array {
-  return crypto.getRandomValues(new Uint8Array(length));
+export function randomBytes(length: number = 32): Uint8Array & {
+  toString(encoding?: "hex" | "base64" | "utf8" | "utf-8"): string;
+} {
+  // Input validation
+  if (typeof length !== "number" || !Number.isInteger(length)) {
+    throw new TypeError("Length must be an integer");
+  }
+
+  if (length <= 0) {
+    throw new RangeError("Length must be a positive integer");
+  }
+
+  // Maximum length check (arbitrary but reasonable upper limit)
+  const MAX_BYTES = 65536; // 64KB
+  if (length > MAX_BYTES) {
+    throw new RangeError(`Length must be less than or equal to ${MAX_BYTES}`);
+  }
+
+  // Create the Uint8Array
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
+
+  // Add custom toString method
+  Object.defineProperty(bytes, "toString", {
+    value: function (
+      encoding: "hex" | "base64" | "utf8" | "utf-8" = "hex"
+    ): string {
+      if (encoding === "hex") {
+        return Array.from(this)
+          .map((b) => (b as any).toString(16).padStart(2, "0"))
+          .join("");
+      } else if (encoding === "base64") {
+        return btoa(String.fromCharCode(...this));
+      } else if (encoding === "utf8" || encoding === "utf-8") {
+        return new TextDecoder().decode(this);
+      }
+      throw new Error(`Unsupported encoding: ${encoding}`);
+    },
+    writable: false,
+    enumerable: false,
+    configurable: false,
+  });
+
+  return bytes as Uint8Array & { toString(encoding?: string): string };
 }
 
 /**

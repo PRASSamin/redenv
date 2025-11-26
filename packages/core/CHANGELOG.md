@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.1] - 2025-11-26
+
+### Changed
+
+- enhanced `randomBytes` function to support custom encodings.
+
 ## [1.0.0] - 2025-11-25
 
 ### Added

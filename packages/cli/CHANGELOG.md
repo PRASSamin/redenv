@@ -2,18 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.3] - 2025-11-26
+
+### Changed
+
+- Removed the `value` argument from the `add` commands. Now it prompts for the value interactively for multiline values.
+
+## [1.1.2] - 2025-11-26
+
+### Changed
+
+- `token` command now uses `randomBytes` function's base64 encoding to generate random strings.
+
 ## [1.1.1] - 2025-11-25
 
 ### Changed
+
 - Moved the crypto logic to the `@redenv/core` package.
 
 ## [1.1.0] - 2025-11-18
 
 ### Changed
+
 - **BREAKING:** The core crypto engine has been completely refactored from the Node.js-specific `crypto` module (using `scrypt`) to the universal **Web Crypto API** (using `PBKDF2`). This makes the entire system compatible with all modern JavaScript runtimes, including serverless and edge environments.
 - All commands have been updated to work with the new asynchronous cryptographic functions.
 
 ### Fixed
+
 - Resolved a critical TypeScript type conflict between Node.js's `webcrypto.CryptoKey` and the global `CryptoKey` type, ensuring type safety across the project.
 
 ---

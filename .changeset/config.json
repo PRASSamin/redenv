@@ -7,5 +7,5 @@
   "baseBranch": "main",
   "changelog": false,
   "updateInternalDependencies": "patch",
-  "ignore": ["next"]
+  "ignore": ["nextjs"]
 }

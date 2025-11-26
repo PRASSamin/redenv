@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.5] - 2025-11-26
+
+### Added
+
+- Introduced a dedicated entry point for core utility functions: `@redenv/client/utils`. These functions (e.g., `fetchAndDecrypt`, `setSecret`) are now accessible for advanced use cases and building framework-specific clients.
+
+### Changed
+
+- Back to [1.0.1](#101---2025-11-26) for the latest stable release.
+
+## [1.0.1] - 2025-11-26
+
+### Changed
+
+- load() now returns a Record<string, string> instead of get() and getAll(). so from now on use load() to get secrets.
+
 ## [1.0.0] - 2025-11-25
 
 ### Added

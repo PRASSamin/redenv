@@ -168,7 +168,8 @@ export function exportCommand(program: Command) {
             return line;
           const keyMatch = trimmedLine.match(/^([^=]+)=/);
           if (keyMatch) {
-            const key = keyMatch[1].trim();
+            const key = keyMatch[1]?.trim();
+            if (!key) return line;
             if (keysToOverride.includes(key)) {
               return `# ${line} # overridden by redenv`;
             }

@@ -48,13 +48,13 @@ export interface RedenvOptions {
     swr?: number;
   };
   /**
-   * If true, will not print any informational logs to the console.
-   * @default false
+   * If "low", will print only error logs and some info logs to the console.
+   * If "high", will print all logs to the console.
+   * If "none", will not print any logs to the console.
+   * @default "none"
    */
-  quiet?: boolean;
+  log?: LogPreference;
 }
 
-export interface LoadFunction {
-  get: (key: string) => Promise<string | undefined>;
-  getAll: () => Promise<Record<string, string>>;
-}
+
+export type LogPreference = "low" | "high" | "none";

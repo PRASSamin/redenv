@@ -3,6 +3,9 @@ packages:
   - tests/*
 
 onlyBuiltDependencies:
+  - '@swc/core'
+  - '@vercel/speed-insights'
+  - core-js
   - keytar
   - sharp
   - unrs-resolver

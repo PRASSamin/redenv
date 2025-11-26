@@ -18,7 +18,7 @@ import Table from "cli-table3";
 
 // Generates a random, URL-safe string
 const generateRandomString = (length: number) => {
-  return randomBytes(length).toString().slice(0, length);
+  return randomBytes(length).toString("base64").slice(0, length);
 };
 
 // Helper to safely parse the serviceTokens field

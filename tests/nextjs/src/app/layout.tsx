@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { client } from "./redenv";
 import "./globals.css";
+import { redenv } from "./redenv";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,12 +23,13 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  await client.load();
+  const env = await redenv.load();
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+{env.PRAS}
         {children}
       </body>
     </html>

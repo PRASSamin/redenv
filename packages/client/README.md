@@ -38,7 +38,7 @@ bun add @redenv/client
 
 The best practice is to create a single, shared instance of the client and initialize it once when your application starts. This "warms up" the cache for fast access later.
 
-**`src/lib/redenv.ts`**
+**`redenv.ts`**
 
 ```typescript
 import { Redenv } from "@redenv/client";
@@ -67,31 +67,28 @@ There are two ways to access secrets, with programmatic access being the recomme
 
 #### Programmatic Access via `.load()`
 
-This is the **safest and most reliable way** to get secrets. Calling `redenv.load()` returns an accessor object. This ensures you always receive the most up-to-date value according to the client's caching strategy (`stale-while-revalidate`).
+This is the **safest and most reliable way** to get secrets. Calling `redenv.load()` returns a promise that resolves to a `Record<string, string>` object containing all your secrets. This ensures you always receive the most up-to-date value according to the client's caching strategy (`stale-while-revalidate`).
 
-Because `init()` was called at startup, subsequent calls to `load()` are extremely fast as they read directly from the in-memory cache.
-
-**`src/services/billing.ts`**
+**`billing.ts`**
 
 ```typescript
-import { redenv } from "../lib/redenv";
+import { redenv } from "./redenv";
 
 export async function processPayment() {
   // .load() is fast because the cache is already warm.
   // This is the recommended way to ensure you get the latest secret value.
   const secrets = await redenv.load();
-  const stripeKey = await secrets.get("STRIPE_API_KEY");
+  const stripeKey = secrets.STRIPE_API_KEY;
 
   // ... use the key
 }
 
 export async function getActiveFeatureToggles() {
   const secrets = await redenv.load();
-  const allSecrets = await secrets.getAll();
   const featureFlags = {};
-  for (const key in allSecrets) {
+  for (const key in secrets) {
     if (key.startsWith("FEATURE_")) {
-      featureFlags[key] = allSecrets[key];
+      featureFlags[key] = secrets[key];
     }
   }
   return featureFlags;
@@ -102,14 +99,10 @@ export async function getActiveFeatureToggles() {
 
 While the client does populate `process.env`, it's important to understand the behavior:
 
-- `process.env` is populated **only** when `.init()` or `.load()` is called.
-- It is a **point-in-time snapshot** and will **not** be updated automatically in the background.
-- If a secret changes in Redenv, `process.env` will contain a stale value until `.load()` is called again.
-
-This method is suitable for scripts or simple apps where secrets do not change during the application's lifecycle. For long-running servers, you must call `.load()` before accessing `process.env` to ensure the values are fresh.
+- `process.env` is populated **only** when `.load()` is called.
 
 ```typescript
-import { redenv } from "../lib/redenv";
+import { redenv } from "./redenv";
 
 async function doSomethingWithLatestSecrets() {
   // Explicitly call .load() to refresh the process.env snapshot
@@ -121,12 +114,16 @@ async function doSomethingWithLatestSecrets() {
 }
 ```
 
+> [!WARNING]
+> It is recommended to use programmatic access via `.load()` instead of `process.env`.
+> Because `process.env` sometimes can raise some unexpected behavior.
+
 ### 3. Writing Secrets
 
 You can add or update a secret using the `.set()` method. This requires a Service Token with write permissions. Using this method will automatically clear the client's local cache, ensuring the next read is fresh.
 
 ```typescript
-import { redenv } from "./lib/redenv";
+import { redenv } from "./redenv";
 
 // Update the log level dynamically in response to an admin action
 await redenv.set("LOG_LEVEL", "debug");
@@ -144,7 +141,7 @@ The `Redenv` constructor accepts the following options:
 | `upstash`     | `{ url: string, token: string }` | Your Upstash Redis REST credentials (URL and Token).                                                                         |   Yes    |
 | `environment` | `string`                         | The environment within the project to fetch secrets from (e.g., "production", "staging"). Defaults to `'development'`.       |    No    |
 | `cache`       | `{ ttl?: number, swr?: number }` | Caching behavior in seconds. `ttl` is time-to-live, `swr` is stale-while-revalidate. Defaults to `{ ttl: 300, swr: 86400 }`. |    No    |
-| `quiet`       | `boolean`                        | If `true`, suppresses informational logs from the client. Defaults to `false`.                                               |    No    |
+| `log`       | `LogPreference`                        | If `"none"`, suppresses informational logs from the client. Defaults to `"low"`.                                               |    No    |
 
 ## Caching Behavior
 

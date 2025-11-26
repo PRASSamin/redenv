@@ -1,17 +1,17 @@
 import { Redenv } from "@redenv/client";
 
-export const client = new Redenv({
+export const redenv = new Redenv({
   upstash: {
     url: "https://cunning-alien-11827.upstash.io",
     token: "AS4zAAIncDJiOGU1NmQwODQxODY0MzIwODY4OTY1MDI1MmEzZWNjZHAyMTE4Mjc",
   },
-  tokenId: "stk_fqFYGADG20WQE8It",
-  token: "redenv_sk_CzHO-1rUGw1DUzERdLmIt0EQE4MQiQKi",
+  tokenId: "stk_j1S+5SEyJ4kos5mM",
+  token: "redenv_sk_Kgdy81fQRnk44XeotuM5qSGivqgCY57a",
   environment: "development",
-  project: "pras",
+  project: "fetchy",
   cache: {
-    ttl: 60
+    ttl: 60,
   },
 });
 
-await client.init();
+await redenv.init();
