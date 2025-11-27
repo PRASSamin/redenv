@@ -19,7 +19,10 @@ export function restoreCommand(program: Command) {
     .command("restore")
     .argument("<file>", "The backup file to restore from")
     .description("Restore projects from a secure, encrypted backup file")
-    .action(async (filePath) => {
+    .action(action);
+}
+
+export const action = async (filePath: string) => {
       if (!fs.existsSync(filePath)) {
         console.log(chalk.red(`✘ Backup file not found at ${filePath}`));
         return;
@@ -129,9 +132,16 @@ export function restoreCommand(program: Command) {
           `Successfully restored data for ${keysToRestore.length} keys.`
         );
       } catch (err) {
+        const error = err as Error;
         if (spinner.isSpinning) {
           spinner.fail(chalk.red((err as Error).message));
-        } else if ((err as Error).name !== "ExitPromptError") {
+        }
+        
+        if (process.env.REDENV_SHELL_ACTIVE) {
+          throw error;
+        }
+
+        if ((err as Error).name !== "ExitPromptError") {
           console.log(
             chalk.red(
               `\n✘ An unexpected error occurred: ${(err as Error).message}`
@@ -140,5 +150,4 @@ export function restoreCommand(program: Command) {
         }
         process.exit(1);
       }
-    });
-}
+    }

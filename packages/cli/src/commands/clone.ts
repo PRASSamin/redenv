@@ -18,177 +18,174 @@ export function cloneCommand(program: Command) {
     .option("-t, --to <env>", "Destination environment")
     .option("-p, --project <name>", "Project name")
     .option("--skip-config", "Ignore local project config file")
-    .action(async (keyArg, options) => {
-      let { from, to } = options;
-      let project = sanitizeName(options.project);
-      from = sanitizeName(from);
-      to = sanitizeName(to);
+    .action(action);
+}
 
-      const config = options.project ? null : loadProjectConfig();
-      project = project || config?.name;
+export const action = async (keyArg: string, options: any) => {
+  let { from, to } = options;
+  let project = sanitizeName(options.project);
+  from = sanitizeName(from);
+  to = sanitizeName(to);
 
-      if (!project) {
-        const projects = await fetchProjects();
-        if (projects.length === 0) {
-          console.log(chalk.red("✘ No projects found in Redis."));
-          return;
-        }
-        project = await safePrompt(() =>
-          select({
-            message: "Select project:",
-            choices: projects.map((p) => ({ name: p, value: p })),
-          })
-        );
-      }
+  const config = options.project ? null : loadProjectConfig();
+  project = project || config?.name;
 
-      const pek = await unlockProject(project);
+  if (!project) {
+    const projects = await fetchProjects();
+    if (projects.length === 0) {
+      console.log(chalk.red("✘ No projects found in Redis."));
+      return;
+    }
+    project = await safePrompt(() =>
+      select({
+        message: "Select project:",
+        choices: projects.map((p) => ({ name: p, value: p })),
+      })
+    );
+  }
 
-      const envs = (await fetchEnvironments(project)) || [];
-      if (!envs.length || envs.length === 0) {
-        console.log(
-          chalk.red('✘ No environments found for project "' + project + '".')
-        );
-        return;
-      }
+  const pek = options.pek ?? (await unlockProject(project as string));
 
-      if (!from) {
-        from = await safePrompt(() =>
-          select({
-            message: "Select source environment:",
-            choices: envs.map((e) => ({ name: e, value: e })),
-          })
-        );
-      }
+  const envs = (await fetchEnvironments(project)) || [];
+  if (!envs.length || envs.length === 0) {
+    console.log(
+      chalk.red('✘ No environments found for project "' + project + '".')
+    );
+    return;
+  }
 
-      if (!to) {
-        to = await safePrompt(() =>
-          select({
-            message: "Select destination environment:",
-            choices: [
-              ...envs
-                .filter((e) => e !== from)
-                .map((e) => ({ name: e, value: e })),
-              { name: "New environment", value: "New environment" },
-            ],
-          })
-        );
-        if (to === "New environment") {
-          to = await safePrompt(() =>
-            input({
-              required: true,
-              message: "Enter new environment name:",
-              validate: (input) => {
-                if (input === from)
-                  return "Environment name cannot be the same as source.";
-                return nameValidator(input);
-              },
-            })
-          );
-        }
-      }
+  if (!from) {
+    from = await safePrompt(() =>
+      select({
+        message: "Select source environment:",
+        choices: envs.map((e) => ({ name: e, value: e })),
+      })
+    );
+  }
 
-      const sourceKey = `${from}:${project}`;
-      const destKey = `${to}:${project}`;
-      const spinner = ora("Loading variables...").start();
-
-      let sourceVars: Record<string, any> = {};
-      let destVars: Record<string, any> = {};
-
-      try {
-        sourceVars = (await redis.hgetall(sourceKey)) || {};
-        destVars = (await redis.hgetall(destKey)) || {};
-        spinner.succeed("Variables loaded.");
-      } catch (err) {
-        spinner.fail(chalk.red(`Failed: ${(err as Error).message}`));
-        return;
-      }
-
-      if (Object.keys(sourceVars).length === 0) {
-        console.log(chalk.red("✘ Source environment has no variables."));
-        return;
-      }
-
-      const missingKeys = Object.keys(sourceVars).filter((k) => !(k in destVars));
-      if (missingKeys.length === 0) {
-        console.log(
-          chalk.green(
-            `✔ Everything is already synced! No new keys to clone from ${from} → ${to}.`
-          )
-        );
-        return;
-      }
-
-      let selectedKeys: string[] = [];
-      if (keyArg) {
-        if (!missingKeys.includes(keyArg)) {
-          console.log(
-            chalk.yellow(
-              `✘ Key '${keyArg}' already exists in ${to} environment.`
-            )
-          );
-          return;
-        }
-        selectedKeys = [keyArg];
-      } else {
-        selectedKeys = await safePrompt(() =>
-          checkbox({
-            message: `Select keys to clone into ${to}:`,
-            choices: missingKeys.map((k) => ({ name: k, value: k })),
-            loop: false,
-          })
-        );
-        if (selectedKeys.length === 0) {
-          console.log(chalk.yellow("✘ No keys selected."));
-          return;
-        }
-      }
-
-      const newData: Record<string, any> = {};
-      for (const k of selectedKeys) {
-        newData[k] = sourceVars[k];
-      }
-
-      console.log(chalk.cyan("\nKeys to clone:"));
-      const displayPromises = selectedKeys.map(async (k) => {
-        try {
-          const history = sourceVars[k];
-          if (!Array.isArray(history) || history.length === 0)
-            throw new Error();
-          const latestValue = await decrypt(history[0].value, pek);
-          return `  • ${k}=${latestValue}`;
-        } catch {
-          return `  • ${k}=[could not display value]`;
-        }
-      });
-      const displayLines = await Promise.all(displayPromises);
-      console.log(displayLines.join("\n"));
-
-      const confirm = await safePrompt(() =>
-        select({
-          message: "Proceed?",
-          choices: [
-            { name: "Yes", value: "yes" },
-            { name: "No", value: "no" },
-          ],
+  if (!to) {
+    to = await safePrompt(() =>
+      select({
+        message: "Select destination environment:",
+        choices: [
+          ...envs.filter((e) => e !== from).map((e) => ({ name: e, value: e })),
+          { name: "New environment", value: "New environment" },
+        ],
+      })
+    );
+    if (to === "New environment") {
+      to = await safePrompt(() =>
+        input({
+          required: true,
+          message: "Enter new environment name:",
+          validate: (input) => {
+            if (input === from)
+              return "Environment name cannot be the same as source.";
+            return nameValidator(input);
+          },
         })
       );
-      if (confirm === "no") {
-        console.log(chalk.yellow("✘ Cancelled."));
-        return;
-      }
+    }
+  }
 
-      const apply = ora("Cloning...").start();
-      try {
-        const dataToStore: Record<string, string> = {};
-        for (const key in newData) {
-          dataToStore[key] = JSON.stringify(newData[key]);
-        }
-        await redis.hset(destKey, dataToStore);
-        apply.succeed(
-          `Successfully cloned ${selectedKeys.length} key(s) from ${from} → ${to}!`
-        );
-      } catch (err) {
-        apply.fail(chalk.red(`Failed: ${(err as Error).message}`));
-      }
-    });
-}
+  const sourceKey = `${from}:${project}`;
+  const destKey = `${to}:${project}`;
+  const spinner = ora("Loading variables...").start();
+
+  let sourceVars: Record<string, any> = {};
+  let destVars: Record<string, any> = {};
+
+  try {
+    sourceVars = (await redis.hgetall(sourceKey)) || {};
+    destVars = (await redis.hgetall(destKey)) || {};
+    spinner.succeed("Variables loaded.");
+  } catch (err) {
+    spinner.fail(chalk.red(`Failed: ${(err as Error).message}`));
+    return;
+  }
+
+  if (Object.keys(sourceVars).length === 0) {
+    console.log(chalk.red("✘ Source environment has no variables."));
+    return;
+  }
+
+  const missingKeys = Object.keys(sourceVars).filter((k) => !(k in destVars));
+  if (missingKeys.length === 0) {
+    console.log(
+      chalk.green(
+        `✔ Everything is already synced! No new keys to clone from ${from} → ${to}.`
+      )
+    );
+    return;
+  }
+
+  let selectedKeys: string[] = [];
+  if (keyArg) {
+    if (!missingKeys.includes(keyArg)) {
+      console.log(
+        chalk.yellow(`✘ Key '${keyArg}' already exists in ${to} environment.`)
+      );
+      return;
+    }
+    selectedKeys = [keyArg];
+  } else {
+    selectedKeys = await safePrompt(() =>
+      checkbox({
+        message: `Select keys to clone into ${to}:`,
+        choices: missingKeys.map((k) => ({ name: k, value: k })),
+        loop: false,
+      })
+    );
+    if (selectedKeys.length === 0) {
+      console.log(chalk.yellow("✘ No keys selected."));
+      return;
+    }
+  }
+
+  const newData: Record<string, any> = {};
+  for (const k of selectedKeys) {
+    newData[k] = sourceVars[k];
+  }
+
+  console.log(chalk.cyan("\nKeys to clone:"));
+  const displayPromises = selectedKeys.map(async (k) => {
+    try {
+      const history = sourceVars[k];
+      if (!Array.isArray(history) || history.length === 0) throw new Error();
+      const latestValue = await decrypt(history[0].value, pek);
+      return `  • ${k}=${latestValue}`;
+    } catch {
+      return `  • ${k}=[could not display value]`;
+    }
+  });
+  const displayLines = await Promise.all(displayPromises);
+  console.log(displayLines.join("\n"));
+
+  const confirm = await safePrompt(() =>
+    select({
+      message: "Proceed?",
+      choices: [
+        { name: "Yes", value: "yes" },
+        { name: "No", value: "no" },
+      ],
+    })
+  );
+  if (confirm === "no") {
+    console.log(chalk.yellow("✘ Cancelled."));
+    return;
+  }
+
+  const apply = ora("Cloning...").start();
+  try {
+    const dataToStore: Record<string, string> = {};
+    for (const key in newData) {
+      dataToStore[key] = JSON.stringify(newData[key]);
+    }
+    await redis.hset(destKey, dataToStore);
+    apply.succeed(
+      `Successfully cloned ${selectedKeys.length} key(s) from ${from} → ${to}!`
+    );
+  } catch (err) {
+    apply.fail(chalk.red(`Failed: ${(err as Error).message}`));
+  }
+};

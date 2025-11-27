@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.4] - 2025-11-27
+
+### Added
+
+- **Interactive Shell:** Introduced a new `redenv shell` command that launches a dedicated interactive REPL for a project environment. This provides a persistent session for running multiple commands without repeatedly entering the Master Password. The shell supports context switching, command history, and access to most Redenv commands.
+
+### Changed
+
+- **Major Internal Refactoring for Shell Compatibility:** Refactored the internal command structure to support the new interactive shell. Commands now operate in a "shell-aware" mode, allowing for seamless context switching (e.g., `switch env`) and more robust error handling within a REPL environment.
+
 ## [1.1.3] - 2025-11-26
 
 ### Changed

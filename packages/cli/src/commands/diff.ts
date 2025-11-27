@@ -15,7 +15,10 @@ export function diffCommand(program: Command) {
     .description("Show differences between any two environments of a project")
     .option("--skip-config", "Ignore project config file")
     .option("-p, --project <name>", "Specify project name")
-    .action(async (options) => {
+    .action(action);
+}
+
+export const action = async (options: any) => {
       let projectName = sanitizeName(options.project);
       let config = null;
 
@@ -36,7 +39,7 @@ export function diffCommand(program: Command) {
         );
       }
 
-      const pek = await unlockProject(projectName);
+      const pek = options.pek ?? (await unlockProject(projectName as string));
 
       const environments = (await fetchEnvironments(projectName)) || [];
       if (environments.length < 2) {
@@ -69,8 +72,8 @@ export function diffCommand(program: Command) {
       const keyB = `${envB}:${projectName}`;
 
       const spinner = ora(`Fetching and decrypting variables...`).start();
-      let decryptedVarsA: Record<string, string> = {};
-      let decryptedVarsB: Record<string, string> = {};
+      const decryptedVarsA: Record<string, string> = {};
+      const decryptedVarsB: Record<string, string> = {};
 
       try {
         const [varsA, varsB] = await Promise.all([
@@ -168,5 +171,4 @@ export function diffCommand(program: Command) {
       }
 
       console.log(chalk.cyan("✨ Diff complete.\n"));
-    });
 }

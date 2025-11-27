@@ -17,7 +17,10 @@ export function viewCommand(program: Command) {
     .description("View the value of a specific ENV variable")
     .option("-p, --project <name>", "Specify the project name")
     .option("-e, --env <env>", "Specify environment")
-    .action(async (key, options) => {
+    .action(action);
+}
+
+export const action = async (key: string, options: any) => {
       const projectConfig = loadProjectConfig();
 
       if (!projectConfig && !options.project) {
@@ -44,7 +47,7 @@ export function viewCommand(program: Command) {
 
       try {
         // Unlock the project first, before any spinners start.
-        const pek = await unlockProject(projectName);
+        const pek = options.pek ?? (await unlockProject(projectName as string));
 
         const spinner = ora(
           `Fetching value for ${chalk.cyan(key)} in ${chalk.yellow(
@@ -75,7 +78,7 @@ export function viewCommand(program: Command) {
           }
           const latestVersion = history[0];
           decryptedValue = await decrypt(latestVersion.value, pek);
-        } catch (e) {
+        } catch {
           console.log(
             chalk.yellow(
               `\n⚠️  Could not decrypt the value for '${key}'. It might be corrupted or the project key is incorrect.`
@@ -103,5 +106,4 @@ export function viewCommand(program: Command) {
           );
         }
       }
-    });
-}
+    }

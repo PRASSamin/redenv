@@ -4,6 +4,23 @@ import { PROJECT_CONFIG_PATH, loadGlobalConfig } from "../core/config";
 import fs from "fs";
 import os from "os";
 
+export const UserCancelledError = "PROMPT_CANCELLED_BY_USER";
+
+export class ContextSwitchRequest extends Error {
+  public readonly newProject?: string;
+  public readonly newEnv?: string;
+
+  constructor(
+    message: string,
+    newContext: { newProject?: string; newEnv?: string }
+  ) {
+    super(message);
+    this.name = "ContextSwitchRequest";
+    this.newProject = newContext.newProject;
+    this.newEnv = newContext.newEnv;
+  }
+}
+
 export async function safePrompt<T>(promptFn: () => Promise<T>): Promise<T> {
   try {
     return await promptFn();
@@ -12,8 +29,12 @@ export async function safePrompt<T>(promptFn: () => Promise<T>): Promise<T> {
       err instanceof Error &&
       (err.name === "AbortError" || err.name === "ExitPromptError")
     ) {
-      console.log(chalk.yellow("Cancelled"));
-      exit(1);
+      console.log(chalk.yellow("\nCancelled")); // Add newline for better formatting
+      if (process.env.REDENV_SHELL_ACTIVE) {
+        throw new Error(UserCancelledError);
+      } else {
+        exit(0);
+      }
     }
     throw err;
   }

@@ -20,7 +20,10 @@ export function exportCommand(program: Command) {
     .option("-p, --project <name>", "Specify project name")
     .option("-e, --env <env>", "Specify environment")
     .option("-f, --file <path>", "Output file (default: .env)", ".env")
-    .action(async (options) => {
+    .action(action);
+}
+
+export const action = async (options: any) => {
       const config = options.skipConfig ? null : loadProjectConfig();
       let projectName = sanitizeName(options.project) || config?.name;
       let environment = sanitizeName(options.env) || config?.environment;
@@ -50,7 +53,7 @@ export function exportCommand(program: Command) {
         );
       }
 
-      const pek = await unlockProject(projectName);
+      const pek = options.pek ?? (await unlockProject(projectName as string));
 
       const redisKey = `${environment}:${projectName}`;
       const spinner =
@@ -64,6 +67,10 @@ export function exportCommand(program: Command) {
         spinner.fail(
           chalk.red(`Failed to fetch variables: ${(err as Error).message}`)
         );
+        
+        if (process.env.REDENV_SHELL_ACTIVE) {
+          throw err;
+        }
         return;
       }
 
@@ -215,6 +222,9 @@ export function exportCommand(program: Command) {
         console.log(
           chalk.red(`✘ Failed to write file: ${(err as Error).message}`)
         );
+        if (process.env.REDENV_SHELL_ACTIVE) {
+          throw err;
+        }
+        process.exit(1);
       }
-    });
-}
+    }

@@ -17,7 +17,10 @@ export function editCommand(program: Command) {
     .description("Update an existing environment variable’s value")
     .option("-p, --project <name>", "Specify the project name")
     .option("-e, --env <env>", "Specify the environment")
-    .action(async (key, options) => {
+    .action(action);
+}
+
+export const action = async (key: string, options: any) => {
       const projectConfig = loadProjectConfig();
 
       if (!projectConfig && !options.project) {
@@ -45,7 +48,7 @@ export function editCommand(program: Command) {
 
       let spinner;
       try {
-        const pek = await unlockProject(projectName);
+        const pek = options.pek ?? (await unlockProject(projectName as string));
 
         const newValue = await safePrompt(() =>
           multiline({
@@ -75,7 +78,7 @@ export function editCommand(program: Command) {
 
         await writeSecret(
           redis,
-          projectName,
+          projectName!,
           environment,
           key,
           newValue,
@@ -94,7 +97,13 @@ export function editCommand(program: Command) {
         const error = err as Error;
         if (spinner && spinner.isSpinning) {
           spinner.fail(chalk.red(error.message));
-        } else if (error.name !== "ExitPromptError") {
+        }
+
+        if (process.env.REDENV_SHELL_ACTIVE) {
+          throw error;
+        }
+
+        if (error.name !== "ExitPromptError") {
           console.log(
             chalk.red(`
 ✘ An unexpected error occurred: ${error.message}`)
@@ -102,5 +111,4 @@ export function editCommand(program: Command) {
         }
         process.exit(1);
       }
-    });
-}
+    }

@@ -14,7 +14,10 @@ export function doctorCommand(program: Command) {
   program
     .command("doctor")
     .description("Run a health check on your redenv setup")
-    .action(async () => {
+    .action(action);
+}
+
+export const action = async () => {
       console.log(chalk.cyan.bold("🩺 Running redenv doctor..."));
       let hasError = false;
 
@@ -126,5 +129,4 @@ export function doctorCommand(program: Command) {
                 "🩺 All checks passed! Your setup is looking healthy."
               ))
       );
-    });
-}
+    }

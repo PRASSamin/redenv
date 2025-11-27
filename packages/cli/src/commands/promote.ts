@@ -23,7 +23,10 @@ export function promoteCommand(program: Command) {
       "Promote new or changed variables from a source environment to a destination"
     )
     .option("-t, --to <to>", "Destination environment name", "production")
-    .action(async (options) => {
+    .action(action);
+}
+
+export const action = async (options: any) => {
       const projectConfig = loadProjectConfig();
       if (!projectConfig) {
         console.log(
@@ -54,7 +57,7 @@ export function promoteCommand(program: Command) {
 
       let spinner: Ora | undefined;
       try {
-        const pek = await unlockProject(projectName);
+        const pek = options.pek ?? (await unlockProject(projectName as string));
 
         spinner = ora(
           `Fetching variables from ${environment} and ${promotionEnvironment}...`
@@ -197,12 +200,17 @@ export function promoteCommand(program: Command) {
         const error = err as Error;
         if (spinner && spinner.isSpinning) {
           spinner.fail(chalk.red(error.message));
-        } else if (error.name !== "ExitPromptError") {
+        }
+
+        if (process.env.REDENV_SHELL_ACTIVE) {
+          throw error;
+        }
+
+        if (error.name !== "ExitPromptError") {
           console.log(
             chalk.red(`\n✘ An unexpected error occurred: ${error.message}`)
           );
         }
         process.exit(1);
       }
-    });
-}
+    }

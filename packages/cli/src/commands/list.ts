@@ -8,7 +8,7 @@ import { select } from "@inquirer/prompts";
 import { safePrompt, sanitizeName } from "../utils";
 import { fetchEnvironments } from "../utils/redis";
 import { unlockProject } from "../core/keys";
-import { type CryptoKey, decrypt } from "@redenv/core";
+import { decrypt } from "@redenv/core";
 
 async function fetchAndDisplayVariables(
   redisKey: string,
@@ -56,7 +56,7 @@ async function fetchAndDisplayVariables(
           decryptionKey
         );
         return [key, decryptedValue];
-      } catch (e) {
+      } catch {
         return [key, chalk.yellow(`[Corrupted or invalid data]`)];
       }
     });
@@ -84,7 +84,10 @@ export function listCommand(program: Command) {
     .description("List all ENV variables for a project")
     .option("-p, --project <name>", "Specify project name")
     .option("-e, --env <env>", "Specify the environment")
-    .action(async (options) => {
+    .action(action);
+}
+
+export const action = async (options: any) => {
       const projectConfig = loadProjectConfig();
       const projectOption = sanitizeName(options.project);
       const envOption = sanitizeName(options.env);
@@ -100,7 +103,7 @@ export function listCommand(program: Command) {
       }
 
       try {
-        const pek = await unlockProject(projectName);
+        const pek = options.pek ?? (await unlockProject(projectName as string));
         let environment = envOption || projectConfig?.environment;
 
         if (!environment) {
@@ -133,5 +136,4 @@ export function listCommand(program: Command) {
           );
         }
       }
-    });
-}
+    }

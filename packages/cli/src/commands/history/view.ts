@@ -1,28 +1,25 @@
 import chalk from "chalk";
 import { Command } from "commander";
-import { loadProjectConfig } from "../core/config";
-import { safePrompt, sanitizeName } from "../utils";
-import { fetchEnvironments, fetchProjects } from "../utils/redis";
-import { select, input } from "@inquirer/prompts";
-import { unlockProject } from "../core/keys";
-import { decrypt } from "@redenv/core";
-import { redis } from "../core/upstash";
+import { loadProjectConfig } from "../../core/config";
+import { safePrompt, sanitizeName } from "../../utils";
+import { fetchEnvironments, fetchProjects } from "../../utils/redis";
+import { select } from "@inquirer/prompts";
+import { unlockProject } from "../../core/keys";
 import ora from "ora";
+import { redis } from "../../core/upstash";
 import Table from "cli-table3";
+import { decrypt } from "@redenv/core";
 
-export function historyCommand(program: Command) {
-  const historyCmd = program
-    .command("history")
-    .description(
-      "View the version history of a secret or manage history settings"
-    );
-
-  historyCmd
+export function historyViewCommand(program: Command) {
+  program
     .command("view [key]")
     .description("View the version history of a specific secret")
     .option("-p, --project <name>", "Specify the project name")
     .option("-e, --env <env>", "Specify the environment")
-    .action(async (key, options) => {
+    .action(action);
+}
+
+export const action = async (key: string, options: any) => {
       let projectName =
         sanitizeName(options.project) || loadProjectConfig()?.name;
       let environment =
@@ -60,7 +57,7 @@ export function historyCommand(program: Command) {
 
       const spinner = ora("Fetching history...").start();
       try {
-        const pek = await unlockProject(projectName);
+        const pek = options.pek ?? (await unlockProject(projectName as string));
         const redisKey = `${environment}:${projectName}`;
 
         let targetKey = key;
@@ -131,8 +128,14 @@ export function historyCommand(program: Command) {
 
         console.log(table.toString());
       } catch (err) {
+        const error = err as Error;
         if (spinner.isSpinning) spinner.fail(chalk.red((err as Error).message));
-        else if ((err as Error).name !== "ExitPromptError") {
+        
+        if (process.env.REDENV_SHELL_ACTIVE) {
+          throw error;
+        }
+        
+        if ((err as Error).name !== "ExitPromptError") {
           console.log(
             chalk.red(
               `\n✘ An unexpected error occurred: ${(err as Error).message}`
@@ -141,77 +144,4 @@ export function historyCommand(program: Command) {
         }
         process.exit(1);
       }
-    });
-
-  historyCmd
-    .command("limit [value]")
-    .description("Change the number of history entries kept for a project")
-    .option("-p, --project <name>", "Specify the project name")
-    .action(async (value, options) => {
-      let projectName =
-        sanitizeName(options.project) || loadProjectConfig()?.name;
-
-      if (!projectName) {
-        const projects = await fetchProjects();
-        if (projects.length === 0) {
-          console.log(chalk.red("✘ No projects found."));
-          return;
-        }
-        projectName = await safePrompt(() =>
-          select({
-            message: "Select a project:",
-            choices: projects.map((p) => ({ name: p, value: p })),
-          })
-        );
-      }
-
-      let limit: number | null = value ? parseInt(value, 10) : null;
-
-      if (limit === null) {
-        const rawLimit = await safePrompt(() =>
-          input({
-            message: "Enter the new history limit. Use 0 for unlimited:",
-            validate: (val) => {
-              const num = Number(val);
-              return (
-                (!isNaN(num) && num >= 0) ||
-                "Please enter a non-negative number."
-              );
-            },
-          })
-        );
-        limit = Number(rawLimit);
-      }
-
-      if (isNaN(limit) || limit < 0) {
-        console.log(
-          chalk.red("✘ History limit must be a non-negative number.")
-        );
-        return;
-      }
-
-      const spinner = ora(
-        `Setting history limit for "${projectName}" to ${limit}...`
-      ).start();
-      try {
-        // We must unlock the project to prove ownership before changing settings
-        await unlockProject(projectName);
-
-        const metaKey = `meta@${projectName}`;
-        await redis.hset(metaKey, { historyLimit: limit });
-        spinner.succeed(
-          `History limit for "${projectName}" is now set to ${limit}.`
-        );
-      } catch (err) {
-        if (spinner.isSpinning) spinner.fail(chalk.red((err as Error).message));
-        else if ((err as Error).name !== "ExitPromptError") {
-          console.log(
-            chalk.red(
-              `\n✘ An unexpected error occurred: ${(err as Error).message}`
-            )
-          );
-        }
-        process.exit(1);
-      }
-    });
-}
+    }

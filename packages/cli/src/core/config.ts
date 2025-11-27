@@ -15,6 +15,7 @@ export const MEMORY_CONFIG_PATH = path.join(
   ".config",
   "redenv.memory.json"
 );
+export const HISTORY_FILE_PATH = path.join(os.homedir(), ".redenv_history");
 
 export type Credential = {
   url: string;

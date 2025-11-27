@@ -72,6 +72,10 @@ redenv view DATABASE_URL
 
 Redenv offers a full suite of commands for managing your secrets. For detailed options on any command, run `redenv <command> --help`.
 
+#### Interactive Shell
+
+- `shell`: Launches an interactive REPL (Read-Eval-Print Loop) for a project environment, allowing you to run multiple commands without re-authenticating or re-specifying project/environment.
+
 #### Core Commands
 
 - `add`

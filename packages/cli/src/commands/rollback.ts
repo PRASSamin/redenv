@@ -17,7 +17,10 @@ export function rollbackCommand(program: Command) {
     .option("-p, --project <name>", "Specify the project name")
     .option("-e, --env <env>", "Specify the environment")
     .option("-t, --to <version>", "The specific version number to roll back to")
-    .action(async (key, options) => {
+    .action(action);
+}
+
+export const action = async (key: string, options: any) => {
       let projectName =
         sanitizeName(options.project) || loadProjectConfig()?.name;
       let environment =
@@ -55,7 +58,7 @@ export function rollbackCommand(program: Command) {
 
       let spinner: Ora | undefined;
       try {
-        const pek = await unlockProject(projectName);
+        const pek = options.pek ?? (await unlockProject(projectName as string));
         const redisKey = `${environment}:${projectName}`;
         let targetKey = key;
 
@@ -233,9 +236,15 @@ export function rollbackCommand(program: Command) {
           `Successfully rolled back "${targetKey}" by creating a new version with the content of version ${targetVersion.version}.`
         );
       } catch (err) {
+        const error = err as Error;
         if (spinner && spinner.isSpinning)
           spinner.fail(chalk.red((err as Error).message));
-        else if ((err as Error).name !== "ExitPromptError") {
+        
+        if (process.env.REDENV_SHELL_ACTIVE) {
+          throw error;
+        }
+
+        if ((err as Error).name !== "ExitPromptError") {
           console.log(
             chalk.red(
               `\n✘ An unexpected error occurred: ${(err as Error).message}`
@@ -244,5 +253,4 @@ export function rollbackCommand(program: Command) {
         }
         process.exit(1);
       }
-    });
-}
+    }

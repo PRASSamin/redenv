@@ -15,7 +15,10 @@ export function removeCommand(program: Command) {
     .description("Remove one or more keys from the project in Upstash")
     .option("-p, --project <name>", "Specify project name")
     .option("-e, --env <env>", "Specify environment")
-    .action(async (key, options) => {
+    .action(action);
+}
+
+export const action = async (key: string, options: any) => {
       let spinner: Ora | undefined;
       try {
         const projectConfig = loadProjectConfig();
@@ -121,12 +124,17 @@ export function removeCommand(program: Command) {
         const error = err as Error;
         if (spinner && spinner.isSpinning) {
           spinner.fail(chalk.red(error.message));
-        } else if (error.name !== "ExitPromptError") {
+        }
+        
+        if (process.env.REDENV_SHELL_ACTIVE) {
+          throw error;
+        }
+
+        if (error.name !== "ExitPromptError") {
           console.log(
             chalk.red(`\n✘ An unexpected error occurred: ${error.message}`)
           );
         }
         process.exit(1);
       }
-    });
-}
+    }

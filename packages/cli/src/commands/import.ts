@@ -26,7 +26,10 @@ export function importCommand(program: Command) {
     .option("--skip-config", "Ignore project config file")
     .option("-p, --project <name>", "Specify project name")
     .option("-e, --env <env>", "Specify environment")
-    .action(async (filePath, options) => {
+    .action(action);
+}
+
+export const action = async (filePath: string, options: any) => {
       if (!fs.existsSync(filePath)) {
         console.log(chalk.red(`✘ File not found: ${filePath}`));
         return;
@@ -80,7 +83,7 @@ export function importCommand(program: Command) {
         }
       }
 
-      const pek = await unlockProject(projectName);
+      const pek = options.pek ?? (await unlockProject(projectName as string));
 
       const spinner = ora("Parsing .env file...").start();
       let parsed: Record<string, string> = {};
@@ -185,6 +188,7 @@ export function importCommand(program: Command) {
       spinner.start("Encrypting and importing variables...");
       try {
         for (const key of keysToImport) {
+          if (!parsed[key]) continue;
           await writeSecret(
             redis,
             projectName,
@@ -205,5 +209,4 @@ export function importCommand(program: Command) {
       }
 
       console.log("");
-    });
-}
+    }
