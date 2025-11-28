@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2025-11-29
+
+### Added
+
+- **`sync` Command:** Introduced a new `redenv sync` command to interactively synchronize variables between any two environments. This powerful command allows for adding, updating, and removing keys to ensure two environments are perfectly aligned.
+
+### Changed
+
+- **Simplified Configuration:** The `productionEnvironment` field in `redenv.config.json` has been deprecated and removed. Commands like `sync` now prompt for a destination environment directly, making the workflow more flexible and explicit.
+
+### Removed
+
+- **`promote` Command:** The `promote` command has been removed and replaced by the more powerful and intuitive `sync` command.
+
 ## [1.1.4] - 2025-11-27
 
 ### Added

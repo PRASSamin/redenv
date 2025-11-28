@@ -9,12 +9,12 @@ import { action as exportAction } from "./export";
 import { action as importAction } from "./import";
 import { action as list } from "./list";
 import { action as logout } from "./logout";
-import { action as promote } from "./promote";
 import { action as register } from "./register";
 import { action as remove } from "./remove";
 import { action as restore } from "./restore";
 import { action as rollback } from "./rollback";
 import { action as view } from "./view";
+import { action as sync } from "./sync";
 
 import { action as dropEnv } from "./drop/env";
 import { action as dropProject } from "./drop/project";
@@ -41,12 +41,12 @@ export const commandActions: Record<string, (...args: any[]) => Promise<void>> =
   import: importAction,
   list,
   logout,
-  promote,
   register,
   remove,
   restore,
   rollback,
   view,
+  sync,
   "drop:env": dropEnv,
   "drop:project": dropProject,
   "history:view": historyView,

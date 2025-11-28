@@ -21,7 +21,6 @@ export function registerCommand(program: Command) {
     .command("register")
     .argument("<project>", "Project name")
     .argument("[env]", "Project environment", "development")
-    .argument("[prodEnv]", "Production environment", "production")
     .option(
       "-l, --history-limit <number>",
       "Number of history entries to keep per secret",
@@ -34,17 +33,14 @@ export function registerCommand(program: Command) {
 export const action = async (
   project: string,
   env: string,
-  prodEnv: string,
   options: any
 ) => {
   const sanitizedProject = sanitizeName(project);
   const sanitizedEnv = sanitizeName(env);
-  const sanitizedProdEnv = sanitizeName(prodEnv);
 
   if (
     project !== sanitizedProject ||
-    env !== sanitizedEnv ||
-    prodEnv !== sanitizedProdEnv
+    env !== sanitizedEnv
   ) {
     console.log(
       chalk.yellow(
@@ -78,7 +74,6 @@ export const action = async (
     const data = {
       name: sanitizedProject,
       environment: sanitizedEnv,
-      productionEnvironment: sanitizedProdEnv,
       createdAt: new Date().toISOString(),
     };
     fs.writeFileSync(PROJECT_CONFIG_PATH, JSON.stringify(data, null, 2));
@@ -136,7 +131,6 @@ export const action = async (
     const data = {
       name: sanitizedProject,
       environment: sanitizedEnv,
-      productionEnvironment: sanitizedProdEnv,
       createdAt: new Date().toISOString(),
     };
     fs.writeFileSync(PROJECT_CONFIG_PATH, JSON.stringify(data, null, 2));

@@ -88,11 +88,9 @@ export function loadProjectConfig() {
 
     const originalName = config.name;
     const originalEnv = config.environment;
-    const originalProdEnv = config.productionEnvironment;
 
     const sanitizedName = sanitizeName(originalName);
     const sanitizedEnv = sanitizeName(originalEnv);
-    const sanitizedProdEnv = sanitizeName(originalProdEnv);
 
     let updated = false;
     if (sanitizedName !== originalName) {
@@ -101,10 +99,6 @@ export function loadProjectConfig() {
     }
     if (sanitizedEnv !== originalEnv) {
       config.environment = sanitizedEnv;
-      updated = true;
-    }
-    if (sanitizedProdEnv !== originalProdEnv) {
-      config.productionEnvironment = sanitizedProdEnv;
       updated = true;
     }
 

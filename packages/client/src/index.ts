@@ -1,5 +1,5 @@
-import { cachified } from "cachified";
-import type { CacheEntry } from "cachified";
+import { cachified } from "@epic-web/cachified";
+import type { CacheEntry } from "@epic-web/cachified";
 import { Redis } from "@upstash/redis";
 import { LRUCache } from "lru-cache";
 import type { RedenvOptions } from "./types";

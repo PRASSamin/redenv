@@ -96,7 +96,7 @@ Redenv offers a full suite of commands for managing your secrets. For detailed o
 - `export`
 - `clone`
 - `diff`
-- `promote`
+- `sync`
 
 #### Auditing & History
 

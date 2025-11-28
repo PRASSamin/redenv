@@ -10,7 +10,6 @@ import { listCommand } from "./commands/list";
 import { viewCommand } from "./commands/view";
 import { editCommand } from "./commands/edit";
 import packageJson from "../package.json";
-import { promoteCommand } from "./commands/promote";
 import { switchCommand } from "./commands/switch";
 import { cloneCommand } from "./commands/clone";
 import { exportCommand } from "./commands/export";
@@ -27,6 +26,7 @@ import { historyCommand } from "./commands/history";
 import { rollbackCommand } from "./commands/rollback";
 import { shellCommand } from "./commands/shell";
 import { setupCommand } from "./commands/setup";
+import { syncCommand } from "./commands/sync";
 
 async function main() {
   try {
@@ -81,7 +81,6 @@ async function main() {
     importCommand(program);
     listCommand(program);
     logoutCommand(program);
-    promoteCommand(program);
     registerCommand(program);
     removeCommand(program);
     restoreCommand(program);
@@ -91,6 +90,7 @@ async function main() {
     switchCommand(program);
     tokenCommand(program);
     viewCommand(program);
+    syncCommand(program);
 
     await program.parseAsync(process.argv);
   } catch (err) {

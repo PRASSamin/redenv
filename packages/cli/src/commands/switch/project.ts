@@ -26,7 +26,6 @@ export const action = async (options: any) => {
   const projectConfig = loadProjectConfig() || {
     name: "",
     environment: "development",
-    productionEnvironment: "production",
     createdAt: new Date().toISOString(),
   };
 
