@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import chalk from "chalk";
+import { type ProjectConfig } from "@redenv/core";
 import { sanitizeName } from "../utils"; // Assuming this exists
 // CHANGED: Switched to async version
 import { lilconfig } from "lilconfig";
@@ -12,9 +13,9 @@ export const GLOBAL_CONFIG_PATH = path.join(
   ".config",
   "redenv.config.json"
 );
-// Note: This constant isn't strictly used by lilconfig (it searches), 
+// Note: This constant isn't strictly used by lilconfig (it searches),
 // but useful for referencing where a default might go.
-export const PROJECT_CONFIG_PATH = "redenv.config.json"; 
+export const PROJECT_CONFIG_PATH = "redenv.config.json";
 
 export const MEMORY_CONFIG_PATH = path.join(
   os.homedir(),
@@ -29,19 +30,12 @@ export type Credential = {
   createdAt: string;
 };
 
-export type ProjectConfig = {
-  name: string;
-  environment: string;
-  _filepath?: string; // Internal use
-  [key: string]: any;
-};
-
 // Loader for dynamic JS/TS config files
 const jitiLoader = createJiti(import.meta.url, { interopDefault: true });
 
 async function loadJiti(filepath: string) {
   const mod = await jitiLoader.import(filepath);
-  // Jiti v2 with interopDefault: true usually returns the module export. 
+  // Jiti v2 with interopDefault: true usually returns the module export.
   // Depending on how the user exports, it might be mod or mod.default.
   // The 'interopDefault' flag handles most cases, but good to be safe:
   return (mod as any).default || mod;
@@ -65,7 +59,8 @@ export function saveToMemoryConfig(newCredential: Credential) {
 
   // FIXED: Check if the specific PAIR exists
   const exists = memory.some(
-    (cred) => cred.url === newCredential.url && cred.token === newCredential.token
+    (cred) =>
+      cred.url === newCredential.url && cred.token === newCredential.token
   );
 
   if (exists) {
@@ -112,7 +107,7 @@ export function loadGlobalConfig() {
 // CHANGED: This must be async to support TS/JS config loading via Jiti
 export async function loadProjectConfig(): Promise<ProjectConfig | undefined> {
   const moduleName = "redenv";
-  
+
   // CHANGED: lilconfig (async) instead of lilconfigSync
   const explorer = lilconfig(moduleName, {
     searchPlaces: [

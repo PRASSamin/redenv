@@ -1,6 +1,6 @@
 {
   "name": "@redenv/core",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Core cryptographic and utility functions for the Redenv ecosystem.",
   "author": {
     "name": "PRAS",
@@ -37,7 +37,8 @@
     "dist"
   ],
   "dependencies": {
-    "@upstash/redis": "^1.35.6"
+    "@upstash/redis": "^1.35.6",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "typescript": "^5"

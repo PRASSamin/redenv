@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.2] - 2025-12-06
+
+### Added
+
+- Added Helper functions for configuration loading and plugin validation.
+
 ## [1.0.1] - 2025-11-26
 
 ### Changed

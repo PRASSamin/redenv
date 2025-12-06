@@ -39,7 +39,13 @@ export const fetchEnvironments = async (
       exit(0);
     }
 
-    const envs = Array.from(new Set(keys.map((k) => k.split(":")[0])));
+    const envs = Array.from(
+      new Set(
+        keys
+          .map((k) => k.split(":")[0])
+          .filter((k): k is string => k !== undefined)
+      )
+    );
 
     return envs;
   } catch (err) {
@@ -54,7 +60,13 @@ export const fetchProjects = async (): Promise<string[]> => {
     const keys = await scanAll("*@*");
     spinner.stop();
 
-    return Array.from(new Set(keys.map((k) => k.split("@")[1])));
+    return Array.from(
+      new Set(
+        keys
+          .map((k) => k.split("@")[1])
+          .filter((k): k is string => k !== undefined)
+      )
+    );
   } catch (err) {
     spinner.fail();
     throw new Error(`Failed to fetch projects: ${(err as Error).message}`);

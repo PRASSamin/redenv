@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2025-12-06
+
+### Added
+
+- **Plugin Architecture:** Introduced a robust plugin system allowing users to extend CLI functionality. Plugins can now be defined in `redenv.config.js` or `redenv.config.ts` and are dynamically loaded at runtime.
+- **Enhanced Configuration:** Added support for JavaScript/TypeScript configuration files (`.js`, `.ts`, `.cjs`, `.mjs`), enabling dynamic configuration and plugin integration.
+
+### Changed
+
+- **Configuration Strategy:** Shifted the primary configuration format from static JSON to dynamic JavaScript/TypeScript files. While `redenv.config.json` remains supported for backward compatibility, new projects are encouraged to use the script-based formats for greater flexibility.
+
 ## [1.2.0] - 2025-11-29
 
 ### Added

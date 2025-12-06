@@ -27,6 +27,7 @@ import { rollbackCommand } from "./commands/rollback";
 import { shellCommand } from "./commands/shell";
 import { setupCommand } from "./commands/setup";
 import { syncCommand } from "./commands/sync";
+import { loadPlugins } from "./core/plugins";
 
 async function main() {
   try {
@@ -91,6 +92,9 @@ async function main() {
     tokenCommand(program);
     viewCommand(program);
     syncCommand(program);
+
+    // load plugins
+    loadPlugins(program, projectConfig);
 
     await program.parseAsync(process.argv);
   } catch (err) {

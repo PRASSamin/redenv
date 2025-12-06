@@ -68,9 +68,50 @@ You can now view your secret at any time.
 redenv view DATABASE_URL
 ```
 
+## Configuration
+
+Redenv supports modern, dynamic configuration files (`redenv.config.ts`, `redenv.config.js`, etc.), giving you full control over your project setup. This approach allows for scripted configuration and, most importantly, the ability to **extend the CLI**.
+
+When creating a new project, Redenv will automatically generate a `redenv.config.ts` file for you.
+
+```typescript
+import { defineConfig } from "@redenv/core";
+
+export default defineConfig({
+  name: "my-project",
+  environment: "development",
+});
+```
+
+## Extending Redenv (Plugins)
+
+Redenv is built to be extensible. We believe that a tool becomes truly powerful when the community can mold it to their needs. The plugin architecture allows **anyone** to create extensions that add new commands, integrations, or workflows directly into the Redenv CLI.
+
+### Using Plugins
+
+To use a plugin, simply install it and add it to your configuration file. This allows you to instantly enrich your CLI with new features.
+
+```typescript
+import { defineConfig } from "@redenv/core";
+import { studioPlugin } from "@redenv/studio";
+
+export default defineConfig({
+  name: "my-project",
+  plugins: [studioPlugin()],
+});
+```
+
+### Building Plugins
+
+We encourage you to build and share your own plugins! Whether it's a specific deployment workflow, a linter for secret values, or an integration with a third-party service, you can make Redenv more feature-rich for everyone.
+
+Plugins are simple to write using the `RedenvPlugin` interface from `@redenv/core`. If you build something useful, consider publishing it to npm with the keyword `redenv-plugin`.
+
 ## Commands
 
 Redenv offers a full suite of commands for managing your secrets. For detailed options on any command, run `redenv <command> --help`.
+
+Any installed plugins will also appear in the help menu and can be run just like native commands (e.g., `redenv <plugin-command>`).
 
 #### Interactive Shell
 
