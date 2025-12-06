@@ -1,15 +1,15 @@
 import chalk from "chalk";
 import { Command } from "commander";
-import { loadProjectConfig, PROJECT_CONFIG_PATH } from "../../core/config";
+import { loadProjectConfig } from "../../core/config";
 import {
   nameValidator,
   safePrompt,
   sanitizeName,
   ContextSwitchRequest,
+  writeProjectConfig,
 } from "../../utils";
 import { fetchEnvironments } from "../../utils/redis";
 import { select, input } from "@inquirer/prompts";
-import fs from "fs";
 
 export function switchEnvCommand(program: Command) {
   // -------------------------------
@@ -23,7 +23,7 @@ export function switchEnvCommand(program: Command) {
 }
 
 export const action = async (options: any) => {
-  const projectConfig = loadProjectConfig() || options;
+  const projectConfig = (await loadProjectConfig()) || options;
   if (!projectConfig) {
     console.log(
       chalk.red("✘ No project registered. Use `redenv register <name>` first.")
@@ -65,6 +65,6 @@ export const action = async (options: any) => {
   }
 
   projectConfig.environment = environment;
-  fs.writeFileSync(PROJECT_CONFIG_PATH, JSON.stringify(projectConfig, null, 2));
+  await writeProjectConfig(projectConfig);
   console.log(chalk.green(`✔ Switched to '${environment}' environment.`));
 };

@@ -1,8 +1,7 @@
 import chalk from "chalk";
-import { PROJECT_CONFIG_PATH, loadProjectConfig } from "../core/config";
-import fs from "fs";
+import {  loadProjectConfig } from "../core/config";
 import { Command } from "commander";
-import { safePrompt, sanitizeName } from "../utils";
+import { safePrompt, sanitizeName, writeProjectConfig } from "../utils";
 import { password } from "@inquirer/prompts";
 import ora from "ora";
 import {
@@ -49,7 +48,7 @@ export const action = async (
     );
   }
 
-  const localConfig = loadProjectConfig();
+  const localConfig = await loadProjectConfig();
   if (localConfig && localConfig.name === sanitizedProject) {
     console.log(
       chalk.yellow(
@@ -74,9 +73,8 @@ export const action = async (
     const data = {
       name: sanitizedProject,
       environment: sanitizedEnv,
-      createdAt: new Date().toISOString(),
     };
-    fs.writeFileSync(PROJECT_CONFIG_PATH, JSON.stringify(data, null, 2));
+    await writeProjectConfig(data);
     console.log(
       chalk.green(
         `\n✔ Successfully connected local directory to project "${sanitizedProject}".`
@@ -131,9 +129,8 @@ export const action = async (
     const data = {
       name: sanitizedProject,
       environment: sanitizedEnv,
-      createdAt: new Date().toISOString(),
     };
-    fs.writeFileSync(PROJECT_CONFIG_PATH, JSON.stringify(data, null, 2));
+    await writeProjectConfig(data);
 
     spinner.succeed(
       chalk.green(

@@ -27,7 +27,7 @@ export const action = async (keyArg: string, options: any) => {
   from = sanitizeName(from);
   to = sanitizeName(to);
 
-  const config = options.project ? null : loadProjectConfig();
+  const config = options.project ? null : await loadProjectConfig();
   project = project || config?.name;
 
   if (!project) {

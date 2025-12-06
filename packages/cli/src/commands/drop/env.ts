@@ -22,7 +22,7 @@ export const action = async (envs: string[], options: any) => {
   let spinner: Ora | undefined;
   try {
     let projectName =
-      sanitizeName(options.project) || loadProjectConfig()?.name;
+      sanitizeName(options.project) || (await loadProjectConfig())?.name;
 
     if (!projectName) {
       const projects = await fetchProjects();

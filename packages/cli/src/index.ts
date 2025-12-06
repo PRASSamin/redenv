@@ -49,7 +49,7 @@ async function main() {
       .description("Centralized Redis environment variables manager")
       .version(packageJson.version);
 
-    const projectConfig = loadProjectConfig();
+    const projectConfig = await loadProjectConfig();
 
     // Helper: Check for forbidden keys in project config
     function checkDangerKeys(config: Record<string, any>) {

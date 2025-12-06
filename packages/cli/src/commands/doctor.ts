@@ -70,7 +70,7 @@ export const action = async () => {
       const localConfigSpinner = ora(
         "Checking for local project configuration..."
       ).start();
-      const projectConfig = loadProjectConfig();
+      const projectConfig = await loadProjectConfig();
       if (!projectConfig) {
         localConfigSpinner.info(
           chalk.blue(

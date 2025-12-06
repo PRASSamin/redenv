@@ -20,10 +20,11 @@ export function historyViewCommand(program: Command) {
 }
 
 export const action = async (key: string, options: any) => {
+  const projectConfig = await loadProjectConfig()
       let projectName =
-        sanitizeName(options.project) || loadProjectConfig()?.name;
+        sanitizeName(options.project) || projectConfig?.name;
       let environment =
-        sanitizeName(options.env) || loadProjectConfig()?.environment;
+        sanitizeName(options.env) || projectConfig?.environment;
 
       if (!projectName) {
         const projects = await fetchProjects();

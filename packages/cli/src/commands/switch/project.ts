@@ -23,10 +23,9 @@ export function switchProjectCommand(program: Command) {
 }
 
 export const action = async (options: any) => {
-  const projectConfig = loadProjectConfig() || {
+  const projectConfig = (await loadProjectConfig()) || {
     name: "",
     environment: "development",
-    createdAt: new Date().toISOString(),
   };
 
   let project = !process.env.REDENV_SHELL_ACTIVE
@@ -62,7 +61,7 @@ export const action = async (options: any) => {
   }
 
   projectConfig.name = project;
-  writeProjectConfig(projectConfig);
+  await writeProjectConfig(projectConfig);
   console.log(
     chalk.green(
       `✔ Switched to project '${project}'. Current environment: '${projectConfig.environment}'.`

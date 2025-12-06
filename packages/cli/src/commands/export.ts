@@ -24,7 +24,7 @@ export function exportCommand(program: Command) {
 }
 
 export const action = async (options: any) => {
-      const config = options.skipConfig ? null : loadProjectConfig();
+      const config = options.skipConfig ? null : await loadProjectConfig();
       let projectName = sanitizeName(options.project) || config?.name;
       let environment = sanitizeName(options.env) || config?.environment;
       const outputFile = options.file;

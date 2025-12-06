@@ -17,7 +17,7 @@ export function historyLimitCommand(program: Command) {
 }
 
 export const action = async (value: string, options: any) => {
-  let projectName = sanitizeName(options.project) || loadProjectConfig()?.name;
+  let projectName = sanitizeName(options.project) || (await loadProjectConfig())?.name;
 
   if (!projectName) {
     const projects = await fetchProjects();

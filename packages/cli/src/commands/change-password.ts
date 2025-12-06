@@ -25,7 +25,7 @@ export function changePasswordCommand(program: Command) {
 }
 
 export const action = async (project: string) => {
-  let projectName = sanitizeName(project) || loadProjectConfig()?.name;
+  let projectName = sanitizeName(project) || (await loadProjectConfig())?.name;
 
   if (!projectName) {
     const projects = await fetchProjects();

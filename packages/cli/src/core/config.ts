@@ -2,14 +2,20 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import chalk from "chalk";
-import { sanitizeName } from "../utils";
+import { sanitizeName } from "../utils"; // Assuming this exists
+// CHANGED: Switched to async version
+import { lilconfig } from "lilconfig";
+import { createJiti } from "jiti";
 
 export const GLOBAL_CONFIG_PATH = path.join(
   os.homedir(),
   ".config",
   "redenv.config.json"
 );
-export const PROJECT_CONFIG_PATH = "redenv.config.json";
+// Note: This constant isn't strictly used by lilconfig (it searches), 
+// but useful for referencing where a default might go.
+export const PROJECT_CONFIG_PATH = "redenv.config.json"; 
+
 export const MEMORY_CONFIG_PATH = path.join(
   os.homedir(),
   ".config",
@@ -23,17 +29,33 @@ export type Credential = {
   createdAt: string;
 };
 
+export type ProjectConfig = {
+  name: string;
+  environment: string;
+  _filepath?: string; // Internal use
+  [key: string]: any;
+};
+
+// Loader for dynamic JS/TS config files
+const jitiLoader = createJiti(import.meta.url, { interopDefault: true });
+
+async function loadJiti(filepath: string) {
+  const mod = await jitiLoader.import(filepath);
+  // Jiti v2 with interopDefault: true usually returns the module export. 
+  // Depending on how the user exports, it might be mod or mod.default.
+  // The 'interopDefault' flag handles most cases, but good to be safe:
+  return (mod as any).default || mod;
+}
+
 export function loadMemoryConfig(): Credential[] {
   if (!fs.existsSync(MEMORY_CONFIG_PATH)) {
     return [];
   }
   try {
     const raw = fs.readFileSync(MEMORY_CONFIG_PATH, "utf-8");
-    // handle empty file
-    if (!raw) return [];
+    if (!raw.trim()) return []; // Handle whitespace-only files
     return JSON.parse(raw);
   } catch {
-    // If file is corrupt or empty, treat as no memory
     return [];
   }
 }
@@ -41,23 +63,29 @@ export function loadMemoryConfig(): Credential[] {
 export function saveToMemoryConfig(newCredential: Credential) {
   const memory = loadMemoryConfig();
 
-  // Don't save if the URL already exists
-  if (
-    memory.some((cred) => cred.url === newCredential.url) &&
-    memory.some((cred) => cred.token === newCredential.token)
-  ) {
+  // FIXED: Check if the specific PAIR exists
+  const exists = memory.some(
+    (cred) => cred.url === newCredential.url && cred.token === newCredential.token
+  );
+
+  if (exists) {
     return;
   }
 
   const updatedMemory = [...memory, newCredential];
 
   try {
+    // Ensure directory exists first
+    const dir = path.dirname(MEMORY_CONFIG_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
     fs.writeFileSync(
       MEMORY_CONFIG_PATH,
       JSON.stringify(updatedMemory, null, 2)
     );
   } catch (err) {
-    // Fail silently if memory can't be saved, it's a non-critical feature.
     console.log(
       chalk.yellow(
         `Warning: Could not save credentials to memory file. ${
@@ -70,6 +98,7 @@ export function saveToMemoryConfig(newCredential: Credential) {
 
 export function loadGlobalConfig() {
   if (!fs.existsSync(GLOBAL_CONFIG_PATH)) {
+    // Return null or throw? Throwing forces the user to run setup.
     throw new Error("Config not found! Run 'redenv setup' first.");
   }
   try {
@@ -80,25 +109,50 @@ export function loadGlobalConfig() {
   }
 }
 
-export function loadProjectConfig() {
-  if (!fs.existsSync(PROJECT_CONFIG_PATH)) return;
+// CHANGED: This must be async to support TS/JS config loading via Jiti
+export async function loadProjectConfig(): Promise<ProjectConfig | undefined> {
+  const moduleName = "redenv";
+  
+  // CHANGED: lilconfig (async) instead of lilconfigSync
+  const explorer = lilconfig(moduleName, {
+    searchPlaces: [
+      `${moduleName}.config.js`,
+      `${moduleName}.config.ts`,
+      `${moduleName}.config.mjs`,
+      `${moduleName}.config.cjs`,
+      `${moduleName}.config.json`,
+      "package.json", // Optional: check package.json property
+    ],
+    loaders: {
+      ".js": loadJiti,
+      ".ts": loadJiti,
+      ".mjs": loadJiti,
+      ".cjs": loadJiti,
+    },
+  });
+
   try {
-    const raw = fs.readFileSync(PROJECT_CONFIG_PATH, "utf-8");
-    const config = JSON.parse(raw);
+    const result = await explorer.search();
+    if (!result || !result.config) return undefined;
+
+    const config = result.config as ProjectConfig;
+    const configPath = result.filepath;
 
     const originalName = config.name;
     const originalEnv = config.environment;
 
-    const sanitizedName = sanitizeName(originalName);
-    const sanitizedEnv = sanitizeName(originalEnv);
+    // Safety check: ensure these fields exist before sanitizing
+    const sanitizedName = originalName ? sanitizeName(originalName) : undefined;
+    const sanitizedEnv = originalEnv ? sanitizeName(originalEnv) : undefined;
 
     let updated = false;
-    if (sanitizedName !== originalName) {
-      config.name = sanitizedName;
+
+    if (originalName && sanitizedName !== originalName) {
+      config.name = sanitizedName!;
       updated = true;
     }
-    if (sanitizedEnv !== originalEnv) {
-      config.environment = sanitizedEnv;
+    if (originalEnv && sanitizedEnv !== originalEnv) {
+      config.environment = sanitizedEnv!;
       updated = true;
     }
 
@@ -108,8 +162,27 @@ export function loadProjectConfig() {
           "Warning: Project config contains colons (:), which are not allowed. They have been automatically replaced with hyphens (-)."
         )
       );
-      fs.writeFileSync(PROJECT_CONFIG_PATH, JSON.stringify(config, null, 2));
+
+      if (configPath.endsWith(".json")) {
+        // Only safe to write back to JSON automatically
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      } else {
+        console.log(
+          chalk.yellow(
+            `Please update your configuration file (${path.basename(
+              configPath
+            )}) manually to remove colons.`
+          )
+        );
+      }
     }
+
+    // Inject path for utils
+    Object.defineProperty(config, "_filepath", {
+      value: configPath,
+      enumerable: false,
+      writable: true,
+    });
 
     return config;
   } catch (err) {

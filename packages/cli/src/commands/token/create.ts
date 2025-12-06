@@ -33,7 +33,7 @@ export function createTokenCommand(program: Command) {
 
 export const action = async (project: string, options: any) => {
   let projectName =
-    sanitizeName(project) || loadProjectConfig()?.name || options.project;
+    sanitizeName(project) || (await loadProjectConfig())?.name || options.project;
 
   if (!projectName) {
     const projects = await fetchProjects();

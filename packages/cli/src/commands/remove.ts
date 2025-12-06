@@ -21,7 +21,7 @@ export function removeCommand(program: Command) {
 export const action = async (key: string, options: any) => {
       let spinner: Ora | undefined;
       try {
-        const projectConfig = loadProjectConfig();
+        const projectConfig = await loadProjectConfig();
         if (!projectConfig && !options.project) {
           console.log(
             chalk.red(
@@ -32,7 +32,7 @@ export const action = async (key: string, options: any) => {
         }
 
         const projectName =
-          sanitizeName(options.project) || projectConfig?.name;
+          sanitizeName(options.project) || projectConfig?.name || "";
         let environment =
           sanitizeName(options.env) || projectConfig?.environment;
 

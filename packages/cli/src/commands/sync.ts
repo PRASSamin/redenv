@@ -20,7 +20,7 @@ export function syncCommand(program: Command) {
 }
 
 export const action = async (options: any) => {
-  let projectName = sanitizeName(options.project) || loadProjectConfig()?.name;
+  let projectName = sanitizeName(options.project) || (await loadProjectConfig())?.name;
 
   if (!projectName) {
     const projects = await fetchProjects();

@@ -21,7 +21,7 @@ export function viewCommand(program: Command) {
 }
 
 export const action = async (key: string, options: any) => {
-  const projectConfig = loadProjectConfig();
+  const projectConfig = await loadProjectConfig();
 
   if (!projectConfig && !options.project) {
     console.log(
@@ -32,7 +32,7 @@ export const action = async (key: string, options: any) => {
     return;
   }
 
-  const projectName = sanitizeName(options.project) || projectConfig?.name;
+  const projectName = sanitizeName(options.project) || projectConfig?.name || "";
   let environment = sanitizeName(options.env) || projectConfig?.environment;
 
   if (!environment) {

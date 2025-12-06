@@ -22,7 +22,7 @@ export const action = async (options: any) => {
       let projectName = sanitizeName(options.project);
       let config = null;
 
-      if (!options.skipConfig) config = loadProjectConfig();
+      if (!options.skipConfig) config = await loadProjectConfig();
       if (!projectName && config) projectName = config.name;
 
       if (!projectName) {

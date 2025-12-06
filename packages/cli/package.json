@@ -41,14 +41,16 @@
   "dependencies": {
     "@cli-prompts/multiline": "^1.0.0",
     "@inquirer/prompts": "^7.10.1",
+    "@redenv/core": "workspace:*",
     "@upstash/redis": "^1.35.6",
     "chalk": "^5.6.2",
     "cli-table3": "^0.6.5",
     "commander": "^14.0.2",
     "dotenv": "^17.2.3",
     "enquirer": "^2.4.1",
+    "jiti": "^2.6.1",
     "keytar": "^7.9.0",
-    "ora": "^9.0.0",
-    "@redenv/core": "workspace:*"
+    "lilconfig": "^3.1.3",
+    "ora": "^9.0.0"
   }
 }

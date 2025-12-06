@@ -88,7 +88,7 @@ export function listCommand(program: Command) {
 }
 
 export const action = async (options: any) => {
-      const projectConfig = loadProjectConfig();
+      const projectConfig = await loadProjectConfig();
       const projectOption = sanitizeName(options.project);
       const envOption = sanitizeName(options.env);
 

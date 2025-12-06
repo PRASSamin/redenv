@@ -136,7 +136,7 @@ export function shellCommand(program: Command) {
       // Set an environment variable to signal that the shell is active
       process.env.REDENV_SHELL_ACTIVE = "true";
 
-      const projectConfig = loadProjectConfig();
+      const projectConfig = await loadProjectConfig();
       let projectName = sanitizeName(options.project) || projectConfig?.name;
 
       if (!projectName) {

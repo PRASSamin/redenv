@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import { exit } from "process";
-import { PROJECT_CONFIG_PATH, loadGlobalConfig } from "../core/config";
+import { loadGlobalConfig, loadProjectConfig } from "../core/config";
 import fs from "fs";
 import os from "os";
 
@@ -72,19 +72,73 @@ export const nameValidator = (input: string) => {
   return true;
 };
 
-export const writeProjectConfig = (config: Record<string, unknown>) => {
-  let existingConfig: Record<string, unknown> = {};
-  if (fs.existsSync(PROJECT_CONFIG_PATH)) {
+export const writeProjectConfig = async (config: Record<string, unknown>) => {
+  const currentConfig = await loadProjectConfig();
+  const existingPath = currentConfig?._filepath;
+
+  // SCENARIO 1: Existing JSON Config -> Safe to Merge & Write
+  if (existingPath && existingPath.endsWith(".json")) {
+    let existingContent: Record<string, unknown> = {};
     try {
-      existingConfig = JSON.parse(fs.readFileSync(PROJECT_CONFIG_PATH, "utf8"));
+      existingContent = JSON.parse(fs.readFileSync(existingPath, "utf8"));
     } catch (err) {
       throw new Error(
         `Failed to read project config: ${(err as Error).message}`
       );
     }
+
+    const newContent = sortObject({ ...existingContent, ...config });
+    
+    // Safety: ensure internal keys don't leak into the file
+    delete newContent._filepath; 
+
+    fs.writeFileSync(existingPath, JSON.stringify(newContent, null, 2));
+    console.log(chalk.green(`✔ Updated configuration: ${existingPath}`));
+    return;
   }
-  fs.writeFileSync(
-    PROJECT_CONFIG_PATH,
-    JSON.stringify({ ...existingConfig, ...config }, null, 2)
-  );
+
+  // SCENARIO 2: Existing JS/TS Config -> Unsafe to Write
+  if (existingPath) {
+    console.log(
+      chalk.yellow(
+        `⚠  Configuration found at ${existingPath}.\n` +
+        `   Automatic updates are only supported for JSON files.\n` +
+        `   Please update this file manually.` + 
+        `\n` +
+        `Changes that were skipped: ${JSON.stringify(config, null, 2)}`
+      )
+    );
+    return;
+  }
+
+  // SCENARIO 3: No Config -> Create New Defaults (TS)
+  const targetPath = "redenv.config.ts";
+
+  // Double check file doesn't exist (in case lilconfig missed it or race condition)
+  if (fs.existsSync(targetPath)) {
+    console.log(chalk.yellow(`⚠  ${targetPath} already exists. Skipping creation.`));
+    return;
+  }
+
+  // We don't merge 'currentConfig' here because if we reached this point, 
+  // currentConfig is undefined (no config found).
+  const configContent = sortObject({
+    name: config.name,
+    environment: config.environment || "development",
+    ...config,
+  });
+
+  const tsContent = `import { defineConfig } from "@redenv/core";
+
+export default defineConfig(${JSON.stringify(configContent, null, 2)});
+`;
+
+  fs.writeFileSync(targetPath, tsContent);
+  console.log(chalk.green(`✔ Created new configuration file: ${targetPath}`));
 };
+
+function sortObject(obj: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(obj).sort((a, b) => a[0].localeCompare(b[0]))
+  );
+}

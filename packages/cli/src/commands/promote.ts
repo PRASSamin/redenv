@@ -27,7 +27,7 @@ export function promoteCommand(program: Command) {
 }
 
 export const action = async (options: any) => {
-      const projectConfig = loadProjectConfig();
+      const projectConfig = await loadProjectConfig();
       if (!projectConfig) {
         console.log(
           chalk.red("✘ No project registered. Use `redenv register <name>`.")
@@ -40,7 +40,7 @@ export const action = async (options: any) => {
       let environment = projectConfig.environment;
       if (!environment) {
         environment = "development";
-        writeProjectConfig({ environment });
+        await writeProjectConfig({ environment });
       }
 
       let promotionEnvironment = projectConfig.productionEnvironment || options.to;
@@ -52,7 +52,7 @@ export const action = async (options: any) => {
             validate: nameValidator,
           })
         );
-        writeProjectConfig({ productionEnvironment: promotionEnvironment });
+        await writeProjectConfig({ productionEnvironment: promotionEnvironment });
       }
 
       let spinner: Ora | undefined;

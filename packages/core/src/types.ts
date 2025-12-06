@@ -4,3 +4,9 @@ export type EnvironmentVariableValue = Array<{
   user: string;
   createdAt: string;
 }>;
+
+export type ProjectConfig = {
+  name: string;
+  environment?: string;
+  [key: string]: any;
+};
