@@ -1,6 +1,6 @@
 {
   "name": "@redenv/client",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "A lightweight, caching client for securely fetching secrets from Redenv in any server-side JavaScript or TypeScript application.",
   "author": {
     "name": "PRAS",

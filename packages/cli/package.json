@@ -1,6 +1,6 @@
 {
   "name": "@redenv/cli",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "A zero-knowledge CLI that replaces `.env` files with a secure, centralized, and version-controlled backend on Upstash Redis. Manage secrets dynamically without redeploying your application.",
   "author": {
     "name": "PRAS",

@@ -11,7 +11,6 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { redis } from "./upstash";
 import { unlockProject } from "../core/keys";
-import { parseServiceTokens } from "../commands/token";
 import { loadGlobalConfig } from "./config";
 
 // In-memory cache for ephemeral tokens to avoid regenerating them in the same process
@@ -31,21 +30,12 @@ const tokensToCleanup: { projectName: string; tokenId: string }[] = [];
         chalk.dim(`\n[REDENV] Cleaning up temporary access tokens...`)
       );
 
+      // Best-effort cleanup
       for (const { projectName, tokenId } of tokensToCleanup) {
         try {
           const metaKey = `meta@${projectName}`;
-          // We need to fetch, parse, remove, and save.
-          // This is race-condition prone but acceptable for cleanup.
-          const metadata = await redis.hgetall<Record<string, any>>(metaKey);
-          if (metadata) {
-            const tokens = parseServiceTokens(metadata);
-            if (tokens[tokenId]) {
-              delete tokens[tokenId];
-              await redis.hset(metaKey, {
-                serviceTokens: JSON.stringify(tokens),
-              });
-            }
-          }
+          const field = `ephemeral:${tokenId}`;
+          await redis.hdel(metaKey, field);
         } catch {
           // Ignore cleanup errors
         }
@@ -134,11 +124,11 @@ export function loadPlugins(
             if (ephemeralTokenCache.has(cacheKey)) {
               return ephemeralTokenCache.get(cacheKey)!;
             }
-            
-            // 1. Unlock Project (User Interaction)
+
+            // Unlock Project (User Interaction)
             const pek = await unlockProject(config.name);
-            
-            // 2. Generate Token
+
+            // Generate Token
             const randomStr = (len: number) =>
               randomBytes(len).toString("base64").slice(0, len);
             const tokenId = `stk_ephemeral_${plugin.name}_${randomStr(8)}`;
@@ -149,26 +139,25 @@ export function loadPlugins(
             const exportedPEK = await exportKey(pek);
             const encryptedPEK = await encrypt(exportedPEK, tokenKey);
 
-            // Save to Redis
+            // Save to Redis using Hash Field + HEXPIRE
             const metaKey = `meta@${config.name}`;
-            const metadata = await redis.hgetall<Record<string, any>>(metaKey);
-            const tokens = parseServiceTokens(metadata);
-
-            tokens[tokenId] = {
+            const ephemeralField = `ephemeral:${tokenId}`;
+            const tokenData = {
               encryptedPEK,
               salt: Buffer.from(salt).toString("hex"),
               name: `Ephemeral (${plugin.name})`,
-              description: "Temporary access token for plugin session",
               createdAt: new Date().toISOString(),
-              expiresAt: Date.now() + 60 * 60 * 6 * 1000, // 6 hours expiry as fallback
               ephemeral: true,
             };
+            const TTL = 60 * 60 * 6; // 6 hours (in seconds, hexpire expects seconds)
 
+            // Store the token in the metadata hash
             await redis.hset(metaKey, {
-              serviceTokens: JSON.stringify(tokens),
+              [ephemeralField]: JSON.stringify(tokenData),
             });
+            await redis.hexpire(metaKey, ephemeralField, TTL);
 
-            // 4. Register for Cleanup
+            // Register for Cleanup
             tokensToCleanup.push({ projectName: config.name, tokenId });
 
             const creds = { tokenId, token: tokenSecret };

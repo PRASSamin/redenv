@@ -27,7 +27,18 @@ export async function getPEK(
     typeof metadata.serviceTokens === "string"
       ? JSON.parse(metadata.serviceTokens)
       : metadata.serviceTokens;
-  const tokenInfo = serviceTokens?.[options.tokenId];
+  
+  let tokenInfo = serviceTokens?.[options.tokenId];
+
+  // If not found in standard service tokens, check for ephemeral token field
+  if (!tokenInfo) {
+    const ephemeralField = `ephemeral:${options.tokenId}`;
+    const rawEphemeral = metadata[ephemeralField];
+    if (rawEphemeral) {
+      tokenInfo = typeof rawEphemeral === 'string' ? JSON.parse(rawEphemeral) : rawEphemeral;
+    }
+  }
+
   if (!tokenInfo) throw new Error("Invalid Redenv Token ID.");
 
   const salt = hexToBuffer(tokenInfo.salt);
