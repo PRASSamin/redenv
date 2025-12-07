@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.4] - 2025-12-07
+
+### Added
+
+- **Plugin API Enhancements:**
+  - `PluginContext` now includes `redisUrl` and `redisToken` for direct access to Redis connection details.
+  - `PluginContext` now provides `getEphemeralToken()` to allow plugins to securely obtain temporary, session-scoped Service Tokens.
+
+## [1.0.3] - 2025-12-06
+
+### Added
+
+- Added `createPlugin` function for plugin creation.
+
 ## [1.0.2] - 2025-12-06
 
 ### Added

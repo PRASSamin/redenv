@@ -5,7 +5,9 @@ packages:
 onlyBuiltDependencies:
   - '@swc/core'
   - '@vercel/speed-insights'
+  - bun
   - core-js
+  - esbuild
   - keytar
   - sharp
   - unrs-resolver

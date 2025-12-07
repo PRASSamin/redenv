@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2025-12-07
+
+### Added
+
+- **Plugin Context Enhancements:** The plugin context (`PluginContext`) now provides `redisUrl` and `redisToken` for direct access to the configured Upstash Redis credentials.
+- **Ephemeral Token Support:** Introduced `getEphemeralToken()` in the `PluginContext`, allowing plugins to securely obtain temporary, session-scoped Service Tokens for accessing project secrets. These tokens are automatically cleaned up on CLI exit.
+
 ## [1.3.0] - 2025-12-06
 
 ### Added

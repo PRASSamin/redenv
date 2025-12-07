@@ -8,9 +8,32 @@ export type EnvironmentVariableValue = Array<{
 }>;
 
 export interface PluginContext {
+  /**
+   * The project configuration.
+   */
   config: ProjectConfig;
+  /**
+   * The Redis client instance.
+   */
   redis: Redis;
+  /**
+   * The current working directory.
+   */
   cwd: string;
+  /**
+   * The Redis URL.
+   */
+  redisUrl: string;
+  /**
+   * The Redis token.
+   */
+  redisToken: string;
+  /**
+   * Generates a temporary Service Token for this plugin.
+   * This prompts the user to unlock the project if not already unlocked.
+   * The token is saved to Redis and cleaned up automatically when the process exits.
+   */
+  getEphemeralToken: () => Promise<{ tokenId: string; token: string }>;
 }
 
 export interface CommandArgs {

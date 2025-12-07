@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { RedenvPlugin } from "./types";
 
 const PluginSchema = z.object({
   name: z.string().min(1),
@@ -27,4 +28,12 @@ export const validatePlugin = (plugin: unknown) => {
 
     throw new Error(`Broken plugin "${name}": ${errorMsg}`);
   }
+};
+
+/**
+ * Helper to define a plugin with type inference.
+ */
+export const createPlugin = (plugin: RedenvPlugin) => {
+  validatePlugin(plugin);
+  return plugin;
 };
