@@ -12,11 +12,12 @@ import chalk from "chalk";
 import { redis } from "./upstash";
 import { unlockProject } from "../core/keys";
 import { loadGlobalConfig } from "./config";
+import { getAuditUser } from "../utils";
 
 // In-memory cache for ephemeral tokens to avoid regenerating them in the same process
 const ephemeralTokenCache = new Map<
   string,
-  { tokenId: string; token: string }
+  { tokenId: string; token: string; expiresAt: Date }
 >();
 
 // Register a global exit handler once to clean up ALL ephemeral tokens
@@ -108,6 +109,8 @@ export function loadPlugins(
 
         // Handle Action
         pluginCmd.action(async (...actionArgs: any[]) => {
+          // Load Global Config to get Redis credentials
+          const globalConfig = loadGlobalConfig();
           // Cleanup Commander internal args
           actionArgs.pop(); // command object
           const opts = actionArgs.pop() as Record<string, any>; // options object
@@ -119,9 +122,14 @@ export function loadPlugins(
           }, {} as Record<string, any>);
 
           // --- Ephemeral Token Logic ---
-          const getEphemeralToken = async () => {
-            const cacheKey = `${config.name}:${plugin.name}`;
-            if (ephemeralTokenCache.has(cacheKey)) {
+          const getEphemeralToken = async (options?: {
+            projectName?: string;
+            new?: boolean;
+          }) => {
+            const cacheKey = `${options?.projectName || config.name}:${
+              plugin.name
+            }`;
+            if (ephemeralTokenCache.has(cacheKey) && !options?.new) {
               return ephemeralTokenCache.get(cacheKey)!;
             }
 
@@ -131,7 +139,9 @@ export function loadPlugins(
             // Generate Token
             const randomStr = (len: number) =>
               randomBytes(len).toString("base64").slice(0, len);
-            const tokenId = `stk_ephemeral_${plugin.name}_${randomStr(8)}`;
+            const tokenId = `stk_eph_${plugin.name}_${
+              getAuditUser() || randomStr(8)
+            }`;
             const tokenSecret = `redenv_sk_${randomStr(32)}`;
 
             const salt = generateSalt();
@@ -160,13 +170,14 @@ export function loadPlugins(
             // Register for Cleanup
             tokensToCleanup.push({ projectName: config.name, tokenId });
 
-            const creds = { tokenId, token: tokenSecret };
+            const creds = {
+              tokenId,
+              token: tokenSecret,
+              expiresAt: new Date(Date.now() + TTL * 1000),
+            };
             ephemeralTokenCache.set(cacheKey, creds);
             return creds;
           };
-
-          // Load Global Config to get Redis credentials
-          const globalConfig = loadGlobalConfig();
 
           // Execute Plugin Action
           await command.action(argsObject, opts, {

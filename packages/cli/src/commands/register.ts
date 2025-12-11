@@ -11,6 +11,7 @@ import {
   generateSalt,
   exportKey,
   bufferToHex,
+  RedenvError,
 } from "@redenv/core";
 import { redis } from "../core/upstash";
 import { unlockProject } from "../core/keys";
@@ -113,7 +114,7 @@ export const action = async (
 
     const historyLimit = parseInt(options.historyLimit, 10);
     if (isNaN(historyLimit) || historyLimit < 0) {
-      throw new Error("History limit must be a non-negative number.");
+      throw new RedenvError("History limit must be a non-negative number.", "UNKNOWN_ERROR");
     }
 
     const metadata = {

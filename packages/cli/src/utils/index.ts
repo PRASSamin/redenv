@@ -3,6 +3,7 @@ import { exit } from "process";
 import { loadGlobalConfig, loadProjectConfig } from "../core/config";
 import fs from "fs";
 import os from "os";
+import { RedenvError } from "@redenv/core";
 
 export const UserCancelledError = "PROMPT_CANCELLED_BY_USER";
 
@@ -31,7 +32,7 @@ export async function safePrompt<T>(promptFn: () => Promise<T>): Promise<T> {
     ) {
       console.log(chalk.yellow("\nCancelled")); // Add newline for better formatting
       if (process.env.REDENV_SHELL_ACTIVE) {
-        throw new Error(UserCancelledError);
+        throw new RedenvError(UserCancelledError, "PROMPT_CANCELLED");
       } else {
         exit(0);
       }
@@ -82,8 +83,9 @@ export const writeProjectConfig = async (config: Record<string, unknown>) => {
     try {
       existingContent = JSON.parse(fs.readFileSync(existingPath, "utf8"));
     } catch (err) {
-      throw new Error(
-        `Failed to read project config: ${(err as Error).message}`
+      throw new RedenvError(
+        `Failed to read project config: ${(err as Error).message}`,
+        "MISSING_CONFIG"
       );
     }
 
@@ -134,7 +136,6 @@ export default defineConfig(${JSON.stringify(configContent, null, 2)});
 `;
 
   fs.writeFileSync(targetPath, tsContent);
-  console.log(chalk.green(`✔ Created new configuration file: ${targetPath}`));
 };
 
 function sortObject(obj: Record<string, unknown>): Record<string, unknown> {

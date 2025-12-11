@@ -8,7 +8,7 @@ import { select } from "@inquirer/prompts";
 import { safePrompt, sanitizeName } from "../utils";
 import { fetchEnvironments } from "../utils/redis";
 import { unlockProject } from "../core/keys";
-import { decrypt } from "@redenv/core";
+import { decrypt, RedenvError } from "@redenv/core";
 
 async function fetchAndDisplayVariables(
   redisKey: string,
@@ -48,9 +48,11 @@ async function fetchAndDisplayVariables(
     const decryptionPromises = sorted.map(async ([key, history]) => {
       try {
         if (!Array.isArray(history) || history.length === 0) {
-          throw new Error("Invalid history format");
+          throw new RedenvError("Invalid history format", "UNKNOWN_ERROR");
         }
         const latestVersion = history[0];
+        console.log(latestVersion);
+        console.log(decryptionKey);
         const decryptedValue = await decrypt(
           latestVersion.value,
           decryptionKey

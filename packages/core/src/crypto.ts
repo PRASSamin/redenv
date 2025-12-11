@@ -3,6 +3,8 @@
  * Works in Node.js (v16+), Deno, Bun, and browsers.
  */
 
+import { RedenvError } from "./error";
+
 // Access the universal Web Crypto API.
 const crypto = globalThis.crypto;
 
@@ -71,7 +73,10 @@ export function randomBytes(length: number = 32): Uint8Array & {
       } else if (encoding === "utf8" || encoding === "utf-8") {
         return new TextDecoder().decode(this);
       }
-      throw new Error(`Unsupported encoding: ${encoding}`);
+      throw new RedenvError(
+        `Unsupported encoding: ${encoding}`,
+        "UNKNOWN_ERROR"
+      );
     },
     writable: false,
     enumerable: false,
@@ -176,12 +181,12 @@ export async function decrypt(
   key: CryptoKey
 ): Promise<string> {
   if (!encryptedString) {
-    throw new Error("Encrypted string cannot be empty.");
+    throw new RedenvError("Encrypted string cannot be empty.", "UNKNOWN_ERROR");
   }
 
   const parts = encryptedString.split(".");
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
-    throw new Error("Invalid encrypted string format.");
+    throw new RedenvError("Invalid encrypted string format.", "UNKNOWN_ERROR");
   }
 
   try {
@@ -200,8 +205,9 @@ export async function decrypt(
 
     return new TextDecoder().decode(decryptedData);
   } catch {
-    throw new Error(
-      "Decryption failed. This likely means an incorrect password was used or the data is corrupted."
+    throw new RedenvError(
+      "Decryption failed. This likely means an incorrect password was used or the data is corrupted.",
+      "DECRYPTION_FAILED"
     );
   }
 }

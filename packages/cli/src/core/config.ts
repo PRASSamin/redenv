@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import chalk from "chalk";
-import { type ProjectConfig } from "@redenv/core";
+import { RedenvError, type ProjectConfig } from "@redenv/core";
 import { sanitizeName } from "../utils"; // Assuming this exists
 // CHANGED: Switched to async version
 import { lilconfig } from "lilconfig";
@@ -94,13 +94,13 @@ export function saveToMemoryConfig(newCredential: Credential) {
 export function loadGlobalConfig() {
   if (!fs.existsSync(GLOBAL_CONFIG_PATH)) {
     // Return null or throw? Throwing forces the user to run setup.
-    throw new Error("Config not found! Run 'redenv setup' first.");
+    throw new RedenvError("Config not found! Run 'redenv setup' first.", "MISSING_CONFIG");
   }
   try {
     const raw = fs.readFileSync(GLOBAL_CONFIG_PATH, "utf-8");
     return JSON.parse(raw);
   } catch (err) {
-    throw new Error(`Failed to load global config: ${(err as Error).message}`);
+    throw new RedenvError(`Failed to load global config: ${(err as Error).message}`, "MISSING_CONFIG");
   }
 }
 
@@ -181,6 +181,6 @@ export async function loadProjectConfig(): Promise<ProjectConfig | undefined> {
 
     return config;
   } catch (err) {
-    throw new Error(`Failed to load project config: ${(err as Error).message}`);
+    throw new RedenvError(`Failed to load project config: ${(err as Error).message}`, "MISSING_CONFIG");
   }
 }

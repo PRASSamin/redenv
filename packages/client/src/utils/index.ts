@@ -7,6 +7,7 @@ import {
 } from "@redenv/core";
 import { Redis } from "@upstash/redis";
 import type { LogPreference, RedenvOptions } from "../types";
+import { RedenvError } from "@redenv/core";
 
 /**
  * A stateless helper function that fetches and decrypts the Project Encryption Key (PEK).
@@ -21,7 +22,7 @@ export async function getPEK(
 ): Promise<CryptoKey> {
   const metaKey = `meta@${options.project}`;
   const metadata = await redis.hgetall<Record<string, any>>(metaKey);
-  if (!metadata) throw new Error(`Project "${options.project}" not found.`);
+  if (!metadata) throw new RedenvError(`Project "${options.project}" not found.`, "PROJECT_NOT_FOUND");
 
   const serviceTokens =
     typeof metadata.serviceTokens === "string"
@@ -39,7 +40,7 @@ export async function getPEK(
     }
   }
 
-  if (!tokenInfo) throw new Error("Invalid Redenv Token ID.");
+  if (!tokenInfo) throw new RedenvError("Invalid Redenv Token ID.", "INVALID_TOKEN_ID");
 
   const salt = hexToBuffer(tokenInfo.salt);
   const tokenKey = await deriveKey(options.token, salt);

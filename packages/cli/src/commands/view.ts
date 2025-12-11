@@ -8,7 +8,7 @@ import { select } from "@inquirer/prompts";
 import { safePrompt, sanitizeName } from "../utils";
 import { fetchEnvironments } from "../utils/redis";
 import { unlockProject } from "../core/keys";
-import { decrypt } from "@redenv/core";
+import { decrypt, RedenvError } from "@redenv/core";
 
 export function viewCommand(program: Command) {
   program
@@ -70,7 +70,7 @@ export const action = async (key: string, options: any) => {
     let decryptedValue: string;
     try {
       if (!Array.isArray(history) || history.length === 0) {
-        throw new Error("History format is invalid or empty.");
+        throw new RedenvError("History format is invalid or empty.", "UNKNOWN_ERROR");
       }
       const latestVersion = history[0];
       decryptedValue = await decrypt(latestVersion.value, pek);

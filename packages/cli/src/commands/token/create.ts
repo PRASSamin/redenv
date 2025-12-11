@@ -11,6 +11,7 @@ import {
   generateSalt,
   exportKey,
   randomBytes,
+  RedenvError,
 } from "@redenv/core";
 import { redis } from "../../core/upstash";
 import ora, { type Ora } from "ora";
@@ -82,7 +83,7 @@ export const action = async (project: string, options: any) => {
     const metaKey = `meta@${projectName}`;
     const metadata = await redis.hgetall<Record<string, any>>(metaKey);
     if (!metadata) {
-      throw new Error("Failed to retrieve project metadata.");
+      throw new RedenvError("Failed to retrieve project metadata.", "PROJECT_NOT_FOUND");
     }
 
     const serviceTokens = parseServiceTokens(metadata);

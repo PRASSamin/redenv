@@ -12,6 +12,7 @@ import {
   importKey,
   exportKey,
   hexToBuffer,
+  RedenvError,
 } from "@redenv/core";
 import { redis } from "../core/upstash";
 import ora, { type Ora } from "ora";
@@ -62,7 +63,7 @@ export const action = async (project: string) => {
     }>(metaKey);
 
     if (!metadata || !metadata.encryptedPEK || !metadata.salt) {
-      throw new Error("Could not retrieve project metadata.");
+      throw new RedenvError("Could not retrieve project metadata.", "PROJECT_NOT_FOUND");
     }
 
     const salt = hexToBuffer(metadata.salt);

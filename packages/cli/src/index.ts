@@ -28,6 +28,7 @@ import { shellCommand } from "./commands/shell";
 import { setupCommand } from "./commands/setup";
 import { syncCommand } from "./commands/sync";
 import { loadPlugins } from "./core/plugins";
+import { RedenvError } from "@redenv/core";
 
 async function main() {
   try {
@@ -40,7 +41,10 @@ async function main() {
 
     if (invokedCommand && invokedCommand !== "setup" && !isHelpCommand) {
       if (!fs.existsSync(GLOBAL_CONFIG_PATH)) {
-        throw new Error("Config not found! Run 'redenv setup' first.");
+        throw new RedenvError(
+          "Config not found! Run 'redenv setup' first.",
+          "MISSING_CONFIG"
+        );
       }
     }
 
@@ -58,10 +62,11 @@ async function main() {
         key.toUpperCase().includes("UPSTASH")
       );
       if (forbidden.length > 0) {
-        throw new Error(
+        throw new RedenvError(
           `Danger! You cannot store Redis credentials in project config: ${forbidden.join(
             ", "
-          )}`
+          )}`,
+          "UNKNOWN_ERROR"
         );
       }
     }

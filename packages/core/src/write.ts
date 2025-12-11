@@ -1,6 +1,7 @@
 import type { Redis } from "@upstash/redis";
 import { encrypt } from "./crypto";
 import type { EnvironmentVariableValue } from "./types";
+import { RedenvError } from "./error";
 
 /**
  * Handles the complete "read-modify-write" cycle for updating a secret's
@@ -33,7 +34,10 @@ export async function writeSecret(
   ]);
 
   if (!metadata) {
-    throw new Error(`Could not retrieve metadata for project "${projectName}". The project may not exist.`);
+    throw new RedenvError(
+      `Could not retrieve metadata for project "${projectName}". The project may not exist.`,
+      "PROJECT_NOT_FOUND"
+    );
   }
 
   const history = Array.isArray(currentHistory) ? currentHistory : [];

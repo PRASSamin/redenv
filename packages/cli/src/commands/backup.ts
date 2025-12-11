@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { safePrompt } from "../utils";
 import { password } from "@inquirer/prompts";
 import ora from "ora";
-import { deriveKey, encrypt, generateSalt } from "@redenv/core";
+import { deriveKey, encrypt, generateSalt, RedenvError } from "@redenv/core";
 import { redis } from "../core/upstash";
 import { scanAll } from "../utils/redis";
 import fs from "fs";
@@ -62,7 +62,10 @@ export const action = async (options: any) => {
       keysToFetch.push(...envKeys);
 
       if (keysToFetch.length === 0) {
-        throw new Error(`Project "${projectName}" not found or has no data.`);
+        throw new RedenvError(
+          `Project "${projectName}" not found or has no data.`,
+          "MISSING_KEY"
+        );
       }
     } else {
       spinner.text = "Discovering all projects...";
@@ -70,7 +73,10 @@ export const action = async (options: any) => {
       const projectNames = metaKeys.map((k) => k.split("@")[1]).filter(Boolean); // Ensure no empty strings
 
       if (projectNames.length === 0) {
-        throw new Error("No projects found to back up.");
+        throw new RedenvError(
+          "No projects found to back up.",
+          "PROJECT_NOT_FOUND"
+        );
       }
 
       keysToFetch.push(...metaKeys);
@@ -83,7 +89,7 @@ export const action = async (options: any) => {
     }
 
     if (keysToFetch.length === 0) {
-      throw new Error("No data found to back up.");
+      throw new RedenvError("No data found to back up.", "UNKNOWN_ERROR");
     }
 
     const pipeline = redis.pipeline();
@@ -124,7 +130,7 @@ export const action = async (options: any) => {
     if (spinner.isSpinning) {
       spinner.fail(chalk.red(error.message));
     }
-    
+
     if (process.env.REDENV_SHELL_ACTIVE) {
       throw error;
     }

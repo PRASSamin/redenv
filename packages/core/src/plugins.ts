@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { RedenvPlugin } from "./types";
+import { RedenvError } from "./error";
 
 const PluginSchema = z.object({
   name: z.string().min(1),
@@ -26,7 +27,7 @@ export const validatePlugin = (plugin: unknown) => {
     // Try to salvage a name for the error message
     const name = (plugin as any)?.name || "Unknown Plugin";
 
-    throw new Error(`Broken plugin "${name}": ${errorMsg}`);
+    throw new RedenvError(`Broken plugin "${name}": ${errorMsg}`, );
   }
 };
 

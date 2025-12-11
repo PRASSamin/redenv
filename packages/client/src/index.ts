@@ -3,13 +3,8 @@ import type { CacheEntry } from "@epic-web/cachified";
 import { Redis } from "@upstash/redis";
 import { LRUCache } from "lru-cache";
 import type { RedenvOptions } from "./types";
-import {
-  fetchAndDecrypt,
-  populateEnv,
-  setSecret,
-  error,
-  log,
-} from "./utils";
+import { fetchAndDecrypt, populateEnv, setSecret, error, log } from "./utils";
+import { RedenvError } from "@redenv/core";
 
 // Create a single LRU cache instance to be used for all clients.
 const lru = new LRUCache<string, CacheEntry>({ max: 1000 });
@@ -55,7 +50,7 @@ export class Redenv {
       const errorMessage = `[REDENV] Missing required configuration options: ${missing.join(
         ", "
       )}`;
-      throw new Error(errorMessage);
+      throw new RedenvError(errorMessage, "MISSING_CONFIG");
     }
   }
 
@@ -110,7 +105,7 @@ export class Redenv {
           ? err.message
           : "An unknown error occurred during set operation.";
       error(`Failed to set secret: ${errorMessage}`);
-      throw new Error(`Failed to set secret: ${errorMessage}`);
+      throw new RedenvError(`Failed to set secret: ${errorMessage}`, "UNKNOWN_ERROR");
     }
   }
 }

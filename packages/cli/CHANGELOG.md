@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.1] - 2025-12-08
+
+### Added
+
+- **Plugin API Enhancements:** Enhanced `getEphemeralToken` to return `expiresAt` date.
+
 ## [1.4.0] - 2025-12-07
 
 ### Added

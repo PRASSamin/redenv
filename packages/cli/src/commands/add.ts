@@ -6,7 +6,7 @@ import { sanitizeName, safePrompt, getAuditUser } from "../utils";
 import { unlockProject } from "../core/keys";
 import { fetchEnvironments } from "../utils/redis";
 import { select } from "@inquirer/prompts";
-import { writeSecret } from "@redenv/core";
+import { RedenvError, writeSecret } from "@redenv/core";
 import { redis } from "../core/upstash";
 import { multiline } from "@cli-prompts/multiline";
 
@@ -70,8 +70,9 @@ export const action = async (key: string, options: any) => {
     const redisKey = `${environment}:${projectName}`;
     const exists = (await redis.hexists(redisKey, key)) > 0;
     if (exists) {
-      throw new Error(
-        `Key '${key}' already exists. Use 	redenv edit ${key}	 to update it.`
+      throw new RedenvError(
+        `Key '${key}' already exists. Use 	redenv edit ${key}	 to update it.`,
+        "UNKNOWN_ERROR"
       );
     }
 

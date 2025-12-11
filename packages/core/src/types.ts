@@ -33,7 +33,13 @@ export interface PluginContext {
    * This prompts the user to unlock the project if not already unlocked.
    * The token is saved to Redis and cleaned up automatically when the process exits.
    */
-  getEphemeralToken: () => Promise<{ tokenId: string; token: string }>;
+  getEphemeralToken: (options?: {
+    projectName?: string;
+    /**
+     * If `true`, generates a new token even if one is already cached.
+     */
+    new?: boolean;
+  }) => Promise<{ tokenId: string; token: string; expiresAt: Date }>;
 }
 
 export interface CommandArgs {

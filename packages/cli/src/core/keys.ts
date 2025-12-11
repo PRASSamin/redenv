@@ -5,6 +5,7 @@ import { deriveKey, decrypt, exportKey, importKey } from "@redenv/core";
 import ora, { type Ora } from "ora";
 import keytar from "keytar";
 import chalk from "chalk";
+import { RedenvError } from "@redenv/core";
 
 const KEYTAR_SERVICE = "redenv-cli";
 
@@ -54,8 +55,9 @@ export async function unlockProject(projectName: string): Promise<CryptoKey> {
     }>(metaKey);
 
     if (!metadata || !metadata.encryptedPEK || !metadata.salt) {
-      throw new Error(
-        `Could not find encryption metadata for project "${projectName}". The project may not be registered correctly.`
+      throw new RedenvError(
+        `Could not find encryption metadata for project "${projectName}". The project may not be registered correctly.`,
+        "PROJECT_NOT_FOUND"
       );
     }
 
@@ -120,7 +122,10 @@ export async function verifyPassword(projectName: string): Promise<void> {
     }>(metaKey);
 
     if (!metadata || !metadata.encryptedPEK || !metadata.salt) {
-      throw new Error(`Could not find metadata for project "${projectName}".`);
+      throw new RedenvError(
+        `Could not find metadata for project "${projectName}".`,
+        "PROJECT_NOT_FOUND"
+      );
     }
 
     const salt = Buffer.from(metadata.salt, "hex");
